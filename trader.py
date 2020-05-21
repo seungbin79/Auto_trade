@@ -20,11 +20,13 @@ STD_MIN_ACCEL_LEVEL = 59     # 절대적 거래량 속도 기준 (항상 이 속
 
 def is_buyable(item_code, item_dict, kw):
     # 잔고가 있으면 안된다. (일단 샀으면 전량 매도될때까지 추가로 중간에 사지 않는다.)
-    if kw.dict_holding.get(item_code) is None:
-        return False
-    else:
-        if kw.dict_holding[item_code]["보유수량"] <= 0:
-            return False
+    try:
+        if kw.dict_holding.get(item_code) is not None:
+            if kw.dict_holding[item_code]["보유수량"] > 0:
+                print("매수 실시간 잔고 데이터 존재 하므로 매수 금지")
+                return False
+    except Exception as e:
+        print(e, "실시간 잔고 데이터 없음 (매수 조건 부합)")
 
     # 현재 거래량 속도가 전분봉 속도 -> 전전 분봉속도 -> 전전전 분봉속도 대비 거래량 배율 조건이 맞아야 한다.
     cur_accel = item_dict["cur_vol_accel"]
@@ -34,20 +36,27 @@ def is_buyable(item_code, item_dict, kw):
     if ((cur_accel < prev1_accel * STD_BUYABLE_ACCEL_SCALE) and
         (cur_accel < prev2_accel * STD_BUYABLE_ACCEL_SCALE) and
         (cur_accel < prev3_accel * STD_BUYABLE_ACCEL_SCALE)):
+        print("매수 분봉 조건 맞지 않음")
         return False
 
     # 거래량 배율 조건이 맞더라도 최소 거래량 속도를 만족해야 한다.
     cur_accel = item_dict["cur_vol_accel"]
     if cur_accel < STD_MIN_ACCEL_LEVEL:
+        print("매수 거래량 배율 조건 맞지 않음")
         return False
 
     # 현재 분봉의 시가보다 높은 현재 가격이어야 한다.
-    cur_real_price = 0
-    if kw.dict_real_price.get(item_code) is not None:
-        cur_real_price = kw.dict_real_price[item_code]["현재가"]
+    try:
+        cur_real_price = 0
+        if kw.dict_real_price.get(item_code) is not None:
+            cur_real_price = kw.dict_real_price[item_code]["현재가"]
 
-    cur_min_bong_open_price = item_code["open_price"]
-    if cur_min_bong_open_price > cur_real_price:
+        cur_min_bong_open_price = item_code["open_price"]
+        if cur_min_bong_open_price > cur_real_price:
+            print("매수 시가 유지 조건 맞지 않음")
+            return False
+    except Exception as e:
+        print(e, "실시간 시세 데이터 없음")
         return False
 
     print("매수조건 확인 완료 --> 매수가능")
@@ -88,11 +97,13 @@ def auto_buy_sell(item_code, item_dict, kw):
     #print(df_day)
 
     # 실시간 시세 데이터 가져오기
-    if kw.dict_real_price.get(item_code):
-        print("실시간 데이터 없음")
+    try:
+        real_price = kw.dict_real_price[item_code]["현재가"]
+        real_volume = kw.dict_real_price[item_code]["누적거래량"]
+    except Exception as e:
+        print(e, "실시간 데이터 없음")
         return
-    real_price = kw.dict_real_price[item_code]["현재가"]
-    real_volume = kw.dict_real_price[item_code]["누적거래량"]
+
 
     # 현재 시점 기준 8초간 거래량 및 거래량 속도 (큐 사용)
     # 전 분봉 정보 - 가격, 거래량, 전 분봉 거래량 속도
@@ -142,12 +153,12 @@ def auto_buy_sell(item_code, item_dict, kw):
     # 매수 가능여부 확인
     # 거래량 속도가 X배 이상 증가하고 현재 가격이 현재 분봉의 시가보다 높은 경우 매수 단계로 진입한다. (시장가 or 최우선호가)
     if is_buyable(item_code, item_dict, kw):
-        accouns_num = int(kw.get_login_info("ACCOUNT_CNT"))
         accounts = kw.get_login_info("ACCNO")
         account = accounts.split(';')[0]
+        hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
 
         kw.send_order('send_order_req', '0101', account, 1, item_code, item_dict["buy_target_num"], real_price,
-                      '03', '')
+                      hoga_lookup[item_dict["buy_type"]], '')
 
     end_sec = time.time()
     print(item_code, item_dict['name'], accel, round(end_sec - start_sec, 2))

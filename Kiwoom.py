@@ -28,6 +28,7 @@ class Kiwoom(QAxWidget, SingletonInstane):
         self._create_kiwoom_instance()
         self._set_signal_slots()
 
+
     def _create_kiwoom_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
 
@@ -36,7 +37,7 @@ class Kiwoom(QAxWidget, SingletonInstane):
         self.OnReceiveTrData.connect(self._receive_tr_data)
         self.OnReceiveChejanData.connect(self._receive_chejan_data)
         self.OnReceiveRealData.connect(self._receive_real_data)
-        self.onReceiveMsg.connect(self._receive_msg)
+        self.OnReceiveMsg.connect(self._receive_msg)
 
     def comm_connect(self):
         self.dynamicCall("CommConnect()")
