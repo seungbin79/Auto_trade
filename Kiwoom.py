@@ -36,6 +36,7 @@ class Kiwoom(QAxWidget, SingletonInstane):
         self.OnReceiveTrData.connect(self._receive_tr_data)
         self.OnReceiveChejanData.connect(self._receive_chejan_data)
         self.OnReceiveRealData.connect(self._receive_real_data)
+        self.onReceiveMsg.connect(self._receive_msg)
 
     def comm_connect(self):
         self.dynamicCall("CommConnect()")
@@ -84,9 +85,41 @@ class Kiwoom(QAxWidget, SingletonInstane):
         ret = self.dynamicCall("GetRepeatCnt(QString, QString)", trcode, rqname)
         return ret
 
-    def send_order(self, rqname, screen_no, acc_no, order_type, code, quantity, price, hoga, order_no):
-        self.dynamicCall("SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",
-                         [rqname, screen_no, acc_no, order_type, code, quantity, price, hoga, order_no])
+    def send_order(self, sRQName, sScreenNo, sAccNo, nOrderType, sCode, nQty, nPrice, sHogaGb, sOrgOrderNo, **kwargs):
+        """주문
+        :param sRQName: 사용자 구분명
+        :param sScreenNo: 화면번호
+        :param sAccNo: 계좌번호 10자리
+        :param nOrderType: 주문유형 1:신규매수, 2:신규매도 3:매수취소, 4:매도취소, 5:매수정정, 6:매도정정
+        :param sCode: 종목코드
+        :param nQty: 주문수량
+        :param nPrice: 주문가격
+        :param sHogaGb: 거래구분(혹은 호가구분)은 아래 참고
+          00 : 지정가
+          03 : 시장가
+          05 : 조건부지정가
+          06 : 최유리지정가
+          07 : 최우선지정가
+          10 : 지정가IOC
+          13 : 시장가IOC
+          16 : 최유리IOC
+          20 : 지정가FOK
+          23 : 시장가FOK
+          26 : 최유리FOK
+          61 : 장전시간외종가
+          62 : 시간외단일가매매
+          81 : 장후시간외종가
+        :param sOrgOrderNo: 원주문번호입니다. 신규주문에는 공백, 정정(취소)주문할 원주문번호를 입력합니다.
+        :param kwargs:
+        :return:
+        """
+        print("주문: %s %s %s %s %s %s %s %s %s" % (
+        sRQName, sScreenNo, sAccNo, nOrderType, sCode, nQty, nPrice, sHogaGb, sOrgOrderNo))
+        lRet = self.dynamicCall("SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",
+                                       [sRQName, sScreenNo, sAccNo, nOrderType, sCode, nQty, nPrice, sHogaGb,
+                                        sOrgOrderNo])
+        print("send_order.lRet: {}".format(lRet))
+
 
     def _get_chejan_data(self, fid):
         ret = self.dynamicCall("GetChejanData(int)", fid)
@@ -99,6 +132,17 @@ class Kiwoom(QAxWidget, SingletonInstane):
     def get_server_gubun(self):
         ret = self.dynamicCall("KOA_Functions(QString, QString)", "GetServerGubun", "")
         return ret
+
+    def _receive_msg(self, sScrNo, sRQName, sTrCode, sMsg, **kwargs):
+        """주문성공, 실패 메시지
+        :param sScrNo: 화면번호
+        :param sRQName: 사용자 구분명
+        :param sTrCode: TR이름
+        :param sMsg: 서버에서 전달하는 메시지
+        :param kwargs:
+        :return:
+        """
+        print("주문/잔고: %s %s %s %s" % (sScrNo, sRQName, sTrCode, sMsg))
 
     def _receive_real_data(self, sCode, sRealType, sRealData, **kwargs):
         """

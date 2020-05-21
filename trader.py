@@ -142,7 +142,12 @@ def auto_buy_sell(item_code, item_dict, kw):
     # 매수 가능여부 확인
     # 거래량 속도가 X배 이상 증가하고 현재 가격이 현재 분봉의 시가보다 높은 경우 매수 단계로 진입한다. (시장가 or 최우선호가)
     if is_buyable(item_code, item_dict, kw):
-        print("매수")
+        accouns_num = int(kw.get_login_info("ACCOUNT_CNT"))
+        accounts = kw.get_login_info("ACCNO")
+        account = accounts.split(';')[0]
+
+        kw.send_order('send_order_req', '0101', account, 1, item_code, item_dict["buy_target_num"], real_price,
+                      '03', '')
 
     end_sec = time.time()
     print(item_code, item_dict['name'], accel, round(end_sec - start_sec, 2))
