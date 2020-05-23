@@ -12,23 +12,27 @@ import time
 from collections import deque
 import util
 
-MAX_VOL_BUCKET = 8           # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
-MAX_ACCEL_COUNT = 10         # volume accel history 저장 갯수
-STD_MIN_BONG = 1             # 기준 분봉
-STD_BUYABLE_ACCEL_SCALE = 10 # 전봉 대비 매수 가능 거래량 배율
-STD_MIN_ACCEL_LEVEL = 59     # 절대적 거래량 속도 기준 (항상 이 속도 이상이 되어야 한다.)
+MAX_VOL_BUCKET = 8            # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
+MAX_ACCEL_COUNT = 10          # volume accel history 저장 갯수
+STD_MIN_BONG = 1              # 기준 분봉
+STD_BUYABLE_ACCEL_SCALE = 10  # 전봉 대비 매수 가능 거래량 배율
+STD_MIN_ACCEL_LEVEL = 59      # 절대적 거래량 속도 기준 (항상 이 속도 이상이 되어야 한다.) 이거는 차트와 가격대 보고 다시 판단하자
+STD_CUT_MIN_ACCEL_RATIO = 0.5 # 절대적 매도를 위한 전봉 비교를 위한 현재 거래량 속도 대비 비율
 
 def is_buyable(item_code, item_dict, kw):
-    # 잔고가 있으면 안된다. (일단 샀으면 전량 매도될때까지 추가로 중간에 사지 않는다.)
-    try:
-        if kw.dict_holding.get(item_code) is not None:
-            if kw.dict_holding[item_code]["보유수량"] > 0:
-                print("매수 실시간 잔고 데이터 존재 하므로 매수 금지")
-                return False
-    except Exception as e:
-        print(e, "실시간 잔고 데이터 없음 (매수 조건 부합)")
+    # false_cnt = 0 이면 매수 조건이 부합됨을 의미 아닌 경우 매수 조건 안됨
+    false_cnt = 0
 
+    # ===========================================================================
+    # 잔고가 있으면 안된다. (일단 샀으면 전량 매도될때까지 추가로 중간에 사지 않는다.)
+    # ===========================================================================
+    chejango = item_dict["chejango"]
+    if chejango > 0:
+        false_cnt += 1
+
+    # ===========================================================================
     # 현재 거래량 속도가 전분봉 속도 -> 전전 분봉속도 -> 전전전 분봉속도 대비 거래량 배율 조건이 맞아야 한다.
+    # ===========================================================================
     cur_accel = item_dict["cur_vol_accel"]
     prev1_accel = item_dict["pre_min_vol_accel"]
     prev2_accel = item_dict["pre_before_min_vol_accel"]
@@ -36,91 +40,119 @@ def is_buyable(item_code, item_dict, kw):
     if ((cur_accel < prev1_accel * STD_BUYABLE_ACCEL_SCALE) and
         (cur_accel < prev2_accel * STD_BUYABLE_ACCEL_SCALE) and
         (cur_accel < prev3_accel * STD_BUYABLE_ACCEL_SCALE)):
-        print("매수 분봉 조건 맞지 않음")
-        return False
+        false_cnt += 1
 
+    # ===========================================================================
     # 거래량 배율 조건이 맞더라도 최소 거래량 속도를 만족해야 한다.
+    # ===========================================================================
     cur_accel = item_dict["cur_vol_accel"]
     if cur_accel < STD_MIN_ACCEL_LEVEL:
-        print("매수 거래량 배율 조건 맞지 않음")
-        return False
+        false_cnt += 1
 
+    # ===========================================================================
     # 현재 분봉의 시가보다 높은 현재 가격이어야 한다.
-    try:
-        cur_real_price = 0
-        if kw.dict_real_price.get(item_code) is not None:
-            cur_real_price = kw.dict_real_price[item_code]["현재가"]
-
-        cur_min_bong_open_price = item_code["open_price"]
-        if cur_min_bong_open_price > cur_real_price:
-            print("매수 시가 유지 조건 맞지 않음")
-            return False
-    except Exception as e:
-        print(e, "실시간 시세 데이터 없음")
-        return False
-
-    print("매수조건 확인 완료 --> 매수가능")
-    return True
+    # ===========================================================================
+    cur_real_price = item_dict["current_price"]
+    cur_min_bong_open_price = item_dict["open_price"]
+    if cur_min_bong_open_price > cur_real_price:
+        false_cnt += 1
 
 
-def is_sellable():
+    print("02,         ,잔고: %s, 현속도: %s, 전봉속도*배율: %s, 전전봉속도*배율: %s, "
+          "전전전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s "
+          % (chejango, cur_accel, prev1_accel * STD_BUYABLE_ACCEL_SCALE, prev2_accel * STD_BUYABLE_ACCEL_SCALE,
+             prev3_accel * STD_BUYABLE_ACCEL_SCALE, STD_MIN_ACCEL_LEVEL, cur_real_price, cur_min_bong_open_price))
+
+    if false_cnt == 0:
+        return True
+
+    return False
+
+
+def is_sellable(item_code, item_dict, kw):
     pass
+    # 잔고가 있어야 한다.
+    # try:
+    #     if kw.dict_holding.get(item_code) is None:
+    #         if kw.dict_holding[item_code]["보유수량"] <= 0:
+    #             print("매수 실시간 잔고 데이터 없으므로 매도 불가")
+    #             return False
+    # except Exception as e:
+    #     print(e, "실시간 잔고 데이터 없음 (매도 조건 부합)")
+
+    # 거래량 분봉 속도가 줄어드는 경우
+
+    # 전 분봉 속도 대비 accel이 현저희 낮을 때
+
+    # 가격이 매입가 보다 절대수치% 만큼 빠진 경우
+
+
 
 def auto_buy_sell(item_code, item_dict, kw):
-    start_sec = time.time()
-    # 실시간 현재 시세 정보 - 현재 가격, 현 분봉 시가, 거래량
+    accounts = kw.get_login_info("ACCNO")
+    account_number = accounts.split(';')[0]
+
+    #===========================================================================
+    # 현재 분봉 시세 정보 - 현재 가격, 현 분봉 시가, 거래량
+    # ===========================================================================
     kw.one_min_price = {'date': [], 'open': [], 'high': [], 'low': [], 'cur': [], 'volume': []}
 
     kw.set_input_value("종목코드", item_code)
     kw.set_input_value("틱범위", STD_MIN_BONG)
     kw.set_input_value("수정주가구분", 1)
     kw.comm_rq_data("opt10080_req", "opt10080", 0, "0101")
-    time.sleep(0.6)
 
     df_min = pd.DataFrame(kw.one_min_price, columns=['open', 'high', 'low', 'cur', 'volume'],
                           index=kw.one_min_price['date'])
 
     #print(df_min)
 
-    # kw.ohlcv = {'date': [], 'open': [], 'high': [], 'low': [], 'close': [], 'volume': []}
-    #
-    # today = datetime.datetime.today().strftime("%Y%m%d")
-    # kw.set_input_value("종목코드", item_code)
-    # kw.set_input_value("기준일자", today)
-    # kw.set_input_value("수정주가구분", 1)
-    # kw.comm_rq_data("opt10081_req", "opt10081", 0, "0101")
-    # time.sleep(0.6)
-    #
-    # df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
-    #                       index=kw.ohlcv['date'])
+    # ===========================================================================
+    # 현재 일 시세 정보 - 현재 가격, 현 분봉 시가, 거래량
+    # ===========================================================================
+    kw.ohlcv = {'date': [], 'open': [], 'high': [], 'low': [], 'close': [], 'volume': []}
+
+    today = datetime.datetime.today().strftime("%Y%m%d")
+    kw.set_input_value("종목코드", item_code)
+    kw.set_input_value("기준일자", today)
+    kw.set_input_value("수정주가구분", 1)
+    kw.comm_rq_data("opt10081_req", "opt10081", 0, "0101")
+
+    df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
+                          index=kw.ohlcv['date'])
 
     #print(df_day)
 
-    # 실시간 시세 데이터 가져오기
-    try:
-        real_price = kw.dict_real_price[item_code]["현재가"]
-        real_volume = kw.dict_real_price[item_code]["누적거래량"]
-    except Exception as e:
-        print(e, "실시간 데이터 없음")
-        return
+    # ===========================================================================
+    # 잔고 정보
+    # ===========================================================================
+    kw.profit_dict = {}
+    kw.set_input_value("계좌번호", account_number)
+    kw.comm_rq_data("opt10085_req", "opt10085", 0, "2000")
 
+    if kw.profit_dict.get(item_code) is not None:
+        item_dict["chejango"] = kw.profit_dict[item_code]["chejan"]
 
-    # 현재 시점 기준 8초간 거래량 및 거래량 속도 (큐 사용)
+    # ===========================================================================
+    # 현재 시점 기준 MAX_VOL_BUCKET 초간 거래량 및 거래량 속도 (큐 사용)
     # 전 분봉 정보 - 가격, 거래량, 전 분봉 거래량 속도
+    # ===========================================================================
+
     '''
-        current_price = 0  # 현재 가격
-        open_price = 0  # 현재 분봉의 시가
-        pre_min_vol_accel = 0  # 전 분봉의 거래량 속도
-        pre_before_min_vol_accel = 0  # 전전 분봉의 거래량 속도
-        third_before_min_vol_accel = 0 # 전전전 분봉의 거래량 속도
-        deque_vol_cum = deque 당일 기준 누적 거래량 snapshot
-        deque_vol_time = deque time.time() -- 끝 정수가 (초) snapshot 시간 
-        cur_vol_accel = 0  # 현재 거래량 속도 (10초 기준)
-        accel_history = 0  # 거래량 속도 저장 (히스토리)
+    current_price = 0  # 현재 가격
+    open_price = 0  # 현재 분봉의 시가
+    pre_min_vol_accel = 0  # 전 분봉의 거래량 속도
+    pre_before_min_vol_accel = 0  # 전전 분봉의 거래량 속도
+    third_before_min_vol_accel = 0 # 전전전 분봉의 거래량 속도
+    deque_vol_cum = deque 당일 기준 누적 거래량 snapshot
+    deque_vol_time = deque time.time() -- 끝 정수가 (초) snapshot 시간 
+    cur_vol_accel = 0  # 현재 거래량 속도 (10초 기준)
+    accel_history = 0  # 거래량 속도 저장 
+    buy_time_accel = 0 # 매수시 거래량
+    chejango = 0 # 잔고정보
     '''
 
-    # item_dict['current_price'] = abs(df_min['cur'][0])
-    item_dict['current_price'] = real_price
+    item_dict['current_price'] = abs(df_min['cur'][0])
     item_dict['open_price'] = abs(df_min['open'][0])
     item_dict['pre_min_vol_accel'] = abs(df_min['volume'][1])/60
     item_dict['pre_before_min_vol_accel'] = abs(df_min['volume'][2]) / (STD_MIN_BONG * 60)
@@ -128,13 +160,11 @@ def auto_buy_sell(item_code, item_dict, kw):
 
     if len(item_dict['deque_vol_cum']) >= MAX_VOL_BUCKET: # 거래량 버겟을 어느정도 볼 것인가
         item_dict['deque_vol_cum'].pop()
-        # item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'][0]))
-        item_dict['deque_vol_cum'].appendleft(real_volume)
+        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'][0]))
         item_dict['deque_vol_time'].pop()
         item_dict['deque_vol_time'].appendleft(time.time())
     else:
-        # item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'][0]))
-        item_dict['deque_vol_cum'].appendleft(real_volume)
+        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'][0]))
         item_dict['deque_vol_time'].appendleft(time.time())
 
     # 거래량 속도 계산
@@ -150,20 +180,46 @@ def auto_buy_sell(item_code, item_dict, kw):
         item_dict['accel_history'].pop()
         item_dict['accel_history'].appendleft(accel)
 
-    # 매수 가능여부 확인
-    # 거래량 속도가 X배 이상 증가하고 현재 가격이 현재 분봉의 시가보다 높은 경우 매수 단계로 진입한다. (시장가 or 최우선호가)
-    if is_buyable(item_code, item_dict, kw):
-        accounts = kw.get_login_info("ACCNO")
-        account = accounts.split(';')[0]
-        hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
+    # 콘솔 출력
+    print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전분봉속도: %s, 현분봉속도: %s " %
+          (util.get_str_now(), item_dict['name'], item_dict['current_price'], abs(df_min['volume'][1]), abs(df_min['volume'][0]), abs(df_day['volume'][0]),
+           item_dict['pre_min_vol_accel'], item_dict['cur_vol_accel']))
 
-        kw.send_order('send_order_req', '0101', account, 1, item_code, item_dict["buy_target_num"], real_price,
+    # ===========================================================================
+    # 매수 가능여부 확인 및 매수 진행
+    # 거래량 속도가 X배 이상 증가하고 현재 가격이 현재 분봉의 시가보다 높은 경우 매수 단계로 진입한다. (시장가 or 최우선호가)
+    # ===========================================================================
+    if is_buyable(item_code, item_dict, kw):
+        hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
+        kw.send_order('send_order_req', '0101', account_number, 1, item_code, item_dict["buy_target_num"], item_dict['current_price'],
                       hoga_lookup[item_dict["buy_type"]], '')
 
-    end_sec = time.time()
-    print(item_code, item_dict['name'], accel, round(end_sec - start_sec, 2))
+        # 매수 후 잠시 후 주문취소 (미체결에 대한 주문취소) - 일단 시장가로 대응할거라서..미체결은 없다.
+        # time.sleep(0.5)
+        # to do
+
+        # 체결이 되면 체결된 수량 item_dict 에 업데이트
+        kw.profit_dict = {}
+        kw.set_input_value("계좌번호", account_number)
+        kw.comm_rq_data("opt10085_req", "opt10085", 0, "2000")
+
+        if kw.profit_dict.get(item_code) is not None:
+            item_dict["chejango"] = kw.profit_dict[item_code]["chejan"]
 
 
+    # ===========================================================================
+    # 매도 가능여부 확인 및 매도 진행
+    # ===========================================================================
+    if is_sellable(item_code, item_dict, kw) and item_dict["chejango"] > 0:
+        hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
+        kw.send_order('send_order_req', '0101', account_number, 1, item_code,item_dict["chejango"],
+                      item_dict['current_price'],
+                      hoga_lookup[item_dict["sell_type"]], '')
+
+
+
+
+    time.sleep(1.5)
 
 
 
@@ -189,6 +245,8 @@ if __name__ == "__main__":
     deque_vol_time = deque time.time() -- 끝 정수가 (초) snapshot 시간 
     cur_vol_accel = 0  # 현재 거래량 속도 (10초 기준)
     accel_history = 0  # 거래량 속도 저장 
+    buy_time_accel = 0 # 매수시 거래량
+    chejango = 0 # 잔고정보
     '''
     item_dict = {}
 
@@ -214,8 +272,9 @@ if __name__ == "__main__":
                                'pre_before_min_vol_accel': 0, 'third_before_min_vol_accel': 0,
                                'deque_vol_cum': dq_vol, 'accel_history': dq_accel,
                                'deque_vol_time': dq_time, 'buy_target_num': buy_num,
-                               'buy_target_price': buy_price, 'buy_type': buy_type,
-                               'min_vol_accel': min_vol_accel, 'name': name}
+                               'buy_target_price': buy_price, 'buy_type': buy_type, 'sell_type': buy_type,
+                               'min_vol_accel': min_vol_accel, 'name': name,
+                               'buy_time_accel': 0, 'chejango': 0}
 
         auto_buy_sell(code, item_dict[code], kw)
 

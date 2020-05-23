@@ -28,7 +28,6 @@ class Kiwoom(QAxWidget, SingletonInstane):
         self._create_kiwoom_instance()
         self._set_signal_slots()
 
-
     def _create_kiwoom_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
 
@@ -143,7 +142,7 @@ class Kiwoom(QAxWidget, SingletonInstane):
         :param kwargs:
         :return:
         """
-        print("주문/잔고: %s %s %s %s" % (sScrNo, sRQName, sTrCode, sMsg))
+        # print("주문/잔고: %s %s %s %s" % (sScrNo, sRQName, sTrCode, sMsg))
 
     def _receive_real_data(self, sCode, sRealType, sRealData, **kwargs):
         """
@@ -159,29 +158,45 @@ class Kiwoom(QAxWidget, SingletonInstane):
         :param kwargs:
         :return:
         """
-        # 종목코드에서 'A' 제거
-        if 'A' <= sCode <= 'Z' or 'a' <= sCode <= 'z':
-            sCode = sCode[1:]
+
+        data = []
+        if sCode is not None:
+            data.append(sCode)
 
         if sRealType == "주식시세":
-            list_item_name = ["현재가", "(최우선)매도호가", "(최우선)매수호가", "누적거래량", "누적거래대금",
-                              "시가", "고가", "저가"]
             list_item_id = [10, 27, 28, 13, 14, 16, 17, 18]
-            dict_real_price = {item_name: self._get_comm_real_data(sCode, item_id)
-                               for item_name, item_id in zip(list_item_name, list_item_id)}
+            for fid in list_item_id:
+                value = self._get_comm_real_data(sCode, fid)
+                data.append(value)
 
-            dict_real_price["현재가"] = util.safe_cast(dict_real_price["현재가"], int, 0)
-            dict_real_price["(최우선)매도호가"] = util.safe_cast(dict_real_price["(최우선)매도호가"], int, 0)
-            dict_real_price["(최우선)매수호가"] = util.safe_cast(dict_real_price["(최우선)매수호가"], int, 0)
-            dict_real_price["누적거래량"] = util.safe_cast(dict_real_price["누적거래량"], int, 0)
-            dict_real_price["누적거래대금"] = util.safe_cast(dict_real_price["누적거래대금"], int, 0)
-            dict_real_price["시가"] = util.safe_cast(dict_real_price["시가"], int, 0)
-            dict_real_price["고가"] = util.safe_cast(dict_real_price["고가"], int, 0)
-            dict_real_price["저가"] = util.safe_cast(dict_real_price["저가"], int, 0)
+        self.real_data = data
 
-            self.dict_real_price[sCode] = dict_real_price
+        # print("실시간 시세: %s %s" % (sCode, self.real_data,))
 
-            print("실시간 시세: %s %s" % (sCode, dict_real_price,))
+
+        # # 종목코드에서 'A' 제거
+        # if 'A' <= sCode <= 'Z' or 'a' <= sCode <= 'z':
+        #     sCode = sCode[1:]
+        #
+        # if sRealType == "주식시세":
+        #     list_item_name = ["현재가", "(최우선)매도호가", "(최우선)매수호가", "누적거래량", "누적거래대금",
+        #                       "시가", "고가", "저가"]
+        #     list_item_id = [10, 27, 28, 13, 14, 16, 17, 18]
+        #     dict_real_price = {item_name: self._get_comm_real_data(sCode, item_id)
+        #                        for item_name, item_id in zip(list_item_name, list_item_id)}
+        #
+        #     dict_real_price["현재가"] = util.safe_cast(dict_real_price["현재가"], int, 0)
+        #     dict_real_price["(최우선)매도호가"] = util.safe_cast(dict_real_price["(최우선)매도호가"], int, 0)
+        #     dict_real_price["(최우선)매수호가"] = util.safe_cast(dict_real_price["(최우선)매수호가"], int, 0)
+        #     dict_real_price["누적거래량"] = util.safe_cast(dict_real_price["누적거래량"], int, 0)
+        #     dict_real_price["누적거래대금"] = util.safe_cast(dict_real_price["누적거래대금"], int, 0)
+        #     dict_real_price["시가"] = util.safe_cast(dict_real_price["시가"], int, 0)
+        #     dict_real_price["고가"] = util.safe_cast(dict_real_price["고가"], int, 0)
+        #     dict_real_price["저가"] = util.safe_cast(dict_real_price["저가"], int, 0)
+        #
+        #     self.dict_real_price[sCode] = dict_real_price
+        #
+        #     print("실시간 시세: %s %s" % (sCode, dict_real_price,))
 
 
     def _receive_chejan_data(self, sGubun, nItemCnt, sFIdList, **kwargs):
@@ -269,6 +284,8 @@ class Kiwoom(QAxWidget, SingletonInstane):
             self._opw00018(rqname, trcode)
         elif rqname == "opt10080_req":
             self._opt10080(rqname, trcode)
+        elif rqname == "opt10085_req":
+            self._opt10085(rqname, trcode)
 
         try:
             self.tr_event_loop.exit()
@@ -289,7 +306,6 @@ class Kiwoom(QAxWidget, SingletonInstane):
         lRet = self.dynamicCall("SetRealReg(QString, QString, QString, QString)",
                                 [strScreenNo, strCodeList, strFidList, strOptType])
         return lRet
-
 
 
     def reset_opw00018_output(self):
@@ -316,6 +332,32 @@ class Kiwoom(QAxWidget, SingletonInstane):
     def _opw00001(self, rqname, trcode):
         d2_deposit = self._comm_get_data(trcode, "", rqname, 0, "d+2추정예수금")
         self.d2_deposit = Kiwoom.change_format(d2_deposit)
+
+    def _opt10085(self, rqname, trcode):
+        """계좌수익률요청
+        :param 계좌번호: 계좌번호
+        :param kwargs:
+        :return:
+        """
+        # list_item_name = ["종목코드", "종목명", "현재가", "매입가", "보유수량"]
+        cnt = self._get_repeat_cnt(trcode, rqname)
+        for i in range(cnt):
+            code = self._comm_get_data(trcode, "", rqname, 0, "종목코드")
+            name = self._comm_get_data(trcode, "", rqname, 0, "종목명")
+            current_price = self._comm_get_data(trcode, "", rqname, 0, "현재가")
+            buying_price = self._comm_get_data(trcode, "", rqname, 0, "매입가")
+            chejan = self._comm_get_data(trcode, "", rqname, 0, "보유수량")
+
+            profit_dict = {}
+            profit_dict["code"] = code
+            profit_dict["name"] = name
+            profit_dict["buying_price"] =  abs(util.safe_cast(buying_price, int, 0))
+            profit_dict["current_price"] = abs(util.safe_cast(current_price, int, 0))
+            profit_dict["chejan"] = abs(util.safe_cast(chejan, int, 0))
+
+            self.profit_dict[code] = profit_dict
+
+
 
     def _opw00018(self, rqname, trcode):
         # single data
