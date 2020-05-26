@@ -34,9 +34,9 @@ class Kiwoom(QAxWidget, SingletonInstane):
     def _set_signal_slots(self):
         self.OnEventConnect.connect(self._event_connect)
         self.OnReceiveTrData.connect(self._receive_tr_data)
-        self.OnReceiveChejanData.connect(self._receive_chejan_data)
-        self.OnReceiveRealData.connect(self._receive_real_data)
-        self.OnReceiveMsg.connect(self._receive_msg)
+        # self.OnReceiveChejanData.connect(self._receive_chejan_data)
+        # self.OnReceiveRealData.connect(self._receive_real_data)
+        # self.OnReceiveMsg.connect(self._receive_msg)
 
     def comm_connect(self):
         self.dynamicCall("CommConnect()")
@@ -200,43 +200,44 @@ class Kiwoom(QAxWidget, SingletonInstane):
 
 
     def _receive_chejan_data(self, sGubun, nItemCnt, sFIdList, **kwargs):
+
         print("체결/잔고: %s %s %s" % (sGubun, nItemCnt, sFIdList))
-        # if sGubun == '0':
-        #     list_item_name = ["계좌번호", "주문번호", "관리자사번", "종목코드", "주문업무분류",
-        #                       "주문상태", "종목명", "주문수량", "주문가격", "미체결수량",
-        #                       "체결누계금액", "원주문번호", "주문구분", "매매구분", "매도수구분",
-        #                       "주문체결시간", "체결번호", "체결가", "체결량", "현재가",
-        #                       "매도호가", "매수호가", "단위체결가", "단위체결량", "당일매매수수료",
-        #                       "당일매매세금", "거부사유", "화면번호", "터미널번호", "신용구분",
-        #                       "대출일"]
-        #     list_item_id = [9201, 9203, 9205, 9001, 912,
-        #                     913, 302, 900, 901, 902,
-        #                     903, 904, 905, 906, 907,
-        #                     908, 909, 910, 911, 10,
-        #                     27, 28, 914, 915, 938,
-        #                     939, 919, 920, 921, 922,
-        #                     923]
-        #
-        # dict_contract = {item_name: self._get_chejan_data(item_id).strip() for item_name, item_id in zip(list_item_name, list_item_id)}
-        #
-        # # 종목코드에서 'A' 제거
-        # item_code = dict_contract["종목코드"]
-        # if 'A' <= item_code[0] <= 'Z' or 'a' <= item_code[0] <= 'z':
-        #     item_code = item_code[1:]
-        #     dict_contract["종목코드"] = item_code
+        if sGubun == '0':
+            list_item_name = ["계좌번호", "주문번호", "관리자사번", "종목코드", "주문업무분류",
+                              "주문상태", "종목명", "주문수량", "주문가격", "미체결수량",
+                              "체결누계금액", "원주문번호", "주문구분", "매매구분", "매도수구분",
+                              "주문체결시간", "체결번호", "체결가", "체결량", "현재가",
+                              "매도호가", "매수호가", "단위체결가", "단위체결량", "당일매매수수료",
+                              "당일매매세금", "거부사유", "화면번호", "터미널번호", "신용구분",
+                              "대출일"]
+            list_item_id = [9201, 9203, 9205, 9001, 912,
+                            913, 302, 900, 901, 902,
+                            903, 904, 905, 906, 907,
+                            908, 909, 910, 911, 10,
+                            27, 28, 914, 915, 938,
+                            939, 919, 920, 921, 922,
+                            923]
+
+        dict_contract = {item_name: self._get_chejan_data(item_id).strip() for item_name, item_id in zip(list_item_name, list_item_id)}
+
+        # 종목코드에서 'A' 제거
+        item_code = dict_contract["종목코드"]
+        if 'A' <= item_code[0] <= 'Z' or 'a' <= item_code[0] <= 'z':
+            item_code = item_code[1:]
+            dict_contract["종목코드"] = item_code
 
         # 종목을 대기 리스트에서 제거
-        # if 종목코드 in self.set_stock_ordered:
-        #    self.set_stock_ordered.remove(종목코드)
+        if '종목코드' in self.set_stock_ordered:
+           self.set_stock_ordered.remove('종목코드')
 
         # 매수 체결일 경우 보유종목에 빈 dict 추가 (키만 추가하기 위해)
-        # if "매수" in dict_contract["주문구분"]:
-        #     self.dict_holding[item_code] = {}
-        # # 매도 체결일 경우 보유종목에서 제거
-        # else:
-        #     self.dict_holding.pop(item_code, None)
-        #
-        # print("체결: %s" % (dict_contract,))
+        if "매수" in dict_contract["주문구분"]:
+            self.dict_holding[item_code] = {}
+        # 매도 체결일 경우 보유종목에서 제거
+        else:
+            self.dict_holding.pop(item_code, None)
+
+        print("체결: %s" % (dict_contract,))
 
         if sGubun == '1':
             list_item_name = ["계좌번호", "종목코드", "신용구분", "대출일", "종목명",
