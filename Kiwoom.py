@@ -414,12 +414,19 @@ class Kiwoom(QAxWidget, SingletonInstane):
             # self.one_min_price = {}
 
             for i in range(data_cnt):
-                cur = self._comm_get_data(trcode, "", rqname, i, "현재가")
-                volume = self._comm_get_data(trcode, "", rqname, i, "거래량")
-                date = self._comm_get_data(trcode, "", rqname, i, "체결시간")
-                open = self._comm_get_data(trcode, "", rqname, i, "시가")
-                high = self._comm_get_data(trcode, "", rqname, i, "고가")
-                low = self._comm_get_data(trcode, "", rqname, i, "저가")
+                # cur = self._comm_get_data(trcode, "", rqname, i, "현재가")
+                # volume = self._comm_get_data(trcode, "", rqname, i, "거래량")
+                # date = self._comm_get_data(trcode, "", rqname, i, "체결시간")
+                # open = self._comm_get_data(trcode, "", rqname, i, "시가")
+                # high = self._comm_get_data(trcode, "", rqname, i, "고가")
+                # low = self._comm_get_data(trcode, "", rqname, i, "저가")
+
+                cur = self._get_comm_data(trcode, rqname, i, "현재가")
+                volume = self._get_comm_data(trcode, rqname, i, "거래량")
+                date = self._get_comm_data(trcode, rqname, i, "체결시간")
+                open = self._get_comm_data(trcode, rqname, i, "시가")
+                high = self._get_comm_data(trcode, rqname, i, "고가")
+                low = self._get_comm_data(trcode, rqname, i, "저가")
 
                 self.one_min_price['date'].append(date)
                 self.one_min_price['open'].append(int(open))
