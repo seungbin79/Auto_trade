@@ -77,8 +77,12 @@ class Kiwoom(QAxWidget, SingletonInstane):
         self.tr_event_loop.exec_()
 
     def _comm_get_data(self, code, real_type, field_name, index, item_name):
-        ret = self.dynamicCall("CommGetData(QString, QString, QString, int, QString)", code,
-                               real_type, field_name, index, item_name)
+        ret = self.dynamicCall("CommGetData(QString, QString, QString, int, QString)", [code,
+                               real_type, field_name, index, item_name])
+        return ret.strip()
+
+    def _get_comm_data(self, strTrCode, strRecodeName, nIndex, strItemName):
+        ret = self.dynamicCall("GetCommData(QString, QString, int, QString)", [strTrCode, strRecodeName, nIndex, strItemName])
         return ret.strip()
 
     def _get_repeat_cnt(self, trcode, rqname):
@@ -310,7 +314,7 @@ class Kiwoom(QAxWidget, SingletonInstane):
 
 
     def reset_opw00018_output(self):
-        self.opw00018_output = {'single': [], 'multi': []}
+        self.opw00018_output = {'single': [], 'multi': {}}
 
     def _opt10081(self, rqname, trcode):
         data_cnt = self._get_repeat_cnt(trcode, rqname)
@@ -349,6 +353,7 @@ class Kiwoom(QAxWidget, SingletonInstane):
             buying_price = self._comm_get_data(trcode, "", rqname, 0, "매입가")
             chejan = self._comm_get_data(trcode, "", rqname, 0, "보유수량")
 
+
             profit_dict = {}
             profit_dict["code"] = code
             profit_dict["name"] = name
@@ -382,21 +387,25 @@ class Kiwoom(QAxWidget, SingletonInstane):
         # multi data
         rows = self._get_repeat_cnt(trcode, rqname)
         for i in range(rows):
-            code = self._comm_get_data((trcode, "", rqname, i, "종목번호"))
-            name = self._comm_get_data(trcode, "", rqname, i, "종목명")
-            quantity = self._comm_get_data(trcode, "", rqname, i, "보유수량")
-            purchase_price = self._comm_get_data(trcode, "", rqname, i, "매입가")
-            current_price = self._comm_get_data(trcode, "", rqname, i, "현재가")
-            eval_profit_loss_price = self._comm_get_data(trcode, "", rqname, i, "평가손익")
-            earning_rate = self._comm_get_data(trcode, "", rqname, i, "수익률(%)")
+            code = self._get_comm_data(trcode, rqname, i, "종목번호")
+            name = self._get_comm_data(trcode, rqname, i, "종목명")
+            quantity = self._get_comm_data(trcode, rqname, i, "보유수량")
+            purchase_price = self._get_comm_data(trcode, rqname, i, "매입가")
+            current_price = self._get_comm_data(trcode, rqname, i, "현재가")
+            eval_profit_loss_price = self._get_comm_data(trcode, rqname, i, "평가손익")
+            earning_rate = self._get_comm_data(trcode, rqname, i, "수익률(%)")
 
-            quantity = Kiwoom.change_format(quantity)
-            purchase_price = Kiwoom.change_format(purchase_price)
-            current_price = Kiwoom.change_format(current_price)
-            eval_profit_loss_price = Kiwoom.change_format(eval_profit_loss_price)
-            earning_rate = Kiwoom.change_format2(earning_rate)
+            if 'A' <= code[0] <= 'Z' or 'a' <= code[0] <= 'z':
+                code = code[1:]
 
-            self.opw00018_output['multi'].append([code, name, quantity, purchase_price, current_price, eval_profit_loss_price, earning_rate])
+            self.opw00018_output['multi'][code] = {"name": name,
+                                                   "quantity": int(quantity),
+                                                   "purchase_price": int(purchase_price),
+                                                   "current_price": int(current_price),
+                                                   "eval_profit_loss_price": eval_profit_loss_price,
+                                                   "earning_rate": earning_rate}
+
+
 
     def _opt10080(self, rqname, trcode):
         data_cnt = self._get_repeat_cnt(trcode, rqname)

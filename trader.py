@@ -15,8 +15,8 @@ import util
 MAX_VOL_BUCKET = 8                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
 MAX_ACCEL_COUNT = 10                    # volume accel history 저장 갯수
 STD_MIN_BONG = 1                        # 기준 분봉
-STD_BUYABLE_ACCEL_SCALE = 10            # 전봉 대비 매수 가능 거래량 배율
-STD_MIN_ACCEL_LEVEL = 100               # 절대적 거래량 속도 기준 (항상 이 속도 이상이 되어야 한다.) 종목별로 설정해야 할듯
+STD_BUYABLE_ACCEL_SCALE = 5             # 전봉 대비 매수 가능 거래속도 배율. 종목별로 설정되어야 한다.
+STD_MIN_ACCEL_LEVEL = 500               # 절대적 거래량 속도 기준 (항상 이 속도 이상이 되어야 한다.) 종목별로 설정해야 할듯
 STD_CUT_MIN_ACCEL_RATIO = 0.5           # 절대적 매도를 위한 전봉 비교를 위한 현재 거래량 속도 대비 비율
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
 STD_CUT_BUYING_PRICE_RATIO = 0.2        # 매수가 아래 2% 까지 허용
@@ -75,12 +75,6 @@ def is_buyable(item_code, item_dict, kw):
 
 def is_sellable(item_code, item_dict, kw):
     false_cnt = 0
-    # ===========================================================================
-    # 잔고가 있어야 한다.
-    # ===========================================================================
-    chejango = item_dict["chejango"]
-    if chejango > 0:
-        false_cnt += 1
 
     # 매수시 거래량 속도보다 현재 속도가 현저히 줄어드는 경우
     buying_time_accel = item_dict['buying_time_accel']
@@ -90,9 +84,9 @@ def is_sellable(item_code, item_dict, kw):
 
     # 거래량 속도가 줄어드는 경우 accel_history 4 단계 연속으로 빠지는 경우
     accel_hist = item_dict['accel_history']
-    hist_1 = 0
-    hist_2 = 0
-    hist_3 = 0
+    hist_1 = -999
+    hist_2 = -999
+    hist_3 = -999
     if len(accel_hist) >= 4:
         hist_1 = accel_hist[1]
         hist_2 = accel_hist[2]
@@ -117,7 +111,8 @@ def is_sellable(item_code, item_dict, kw):
         false_idx = "매도가능"
 
     print("03, %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s "
-          % (false_idx, chejango, buying_time_accel, current_accel, hist_1, hist_2, hist_3, pre_min_vol_accel, buying_price, current_price))
+          % (false_idx, item_dict["chejango"], round(buying_time_accel), round(current_accel), round(hist_1), round(hist_2), round(hist_3),
+             round(pre_min_vol_accel), buying_price, current_price))
 
     if false_cnt > 0:
         return True
@@ -162,12 +157,32 @@ def auto_buy_sell(item_code, item_dict, kw):
     # ===========================================================================
     # 잔고 정보
     # ===========================================================================
-    kw.profit_dict = {}
-    kw.set_input_value("계좌번호", account_number)
-    kw.comm_rq_data("opt10085_req", "opt10085", 0, "2000")
+    # kw.profit_dict = {}
+    # kw.set_input_value("계좌번호", account_number)
+    # kw.comm_rq_data("opt10085_req", "opt10085", 0, "2000")
+    #
+    # if kw.profit_dict.get(item_code) is not None:
+    #     item_dict["chejango"] = kw.profit_dict[item_code]["chejan"]
+    #     item_dict["buying_time_price"] = kw.profit_dict[item_code]["buying_price"]
 
-    if kw.profit_dict.get(item_code) is not None:
-        item_dict["chejango"] = kw.profit_dict[item_code]["chejan"]
+    kw.reset_opw00018_output()
+    kw.set_input_value("계좌번호", account_number)
+    kw.comm_rq_data("opw00018_req", "opw00018", 0, "2000")
+    while kw.remained_data:
+        time.sleep(1)
+        kw.set_input_value("계좌번호", account_number)
+        kw.comm_rq_data("opw00018_req", "opw00018", 0, "2000")
+
+    if kw.opw00018_output['multi'].get(item_code) is not None:
+        item_dict["chejango"] =kw.opw00018_output['multi'][item_code]["quantity"]
+        item_dict["buying_time_price"] = kw.opw00018_output['multi'][item_code]["purchase_price"]
+    else:
+        item_dict["chejango"] = 0
+        item_dict["buying_time_price"] = 0
+
+
+
+
 
     # ===========================================================================
     # 현재 시점 기준 MAX_VOL_BUCKET 초간 거래량 및 거래량 속도 (큐 사용)
@@ -185,7 +200,7 @@ def auto_buy_sell(item_code, item_dict, kw):
     cur_vol_accel = 0  # 현재 거래량 속도 (10초 기준)
     accel_history = 0  # 거래량 속도 저장 
     buying_time_accel = 0 # 매수시 거래량 속도
-    buing_time_price = 0 # 매수가
+    buying_time_price = 0 # 매수가
     chejango = 0 # 잔고정보
     '''
 
@@ -216,11 +231,13 @@ def auto_buy_sell(item_code, item_dict, kw):
     if len(item_dict['accel_history']) >= MAX_ACCEL_COUNT:
         item_dict['accel_history'].pop()
         item_dict['accel_history'].appendleft(accel)
+    else:
+        item_dict['accel_history'].appendleft(accel)
 
     # 콘솔 출력
     print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전분봉속도: %s, 현분봉속도: %s " %
           (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'][1])), round(abs(df_min['volume'][0])), round(abs(df_day['volume'][0])),
-           item_dict['pre_min_vol_accel'], item_dict['cur_vol_accel']))
+           round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel']))
 
     # ===========================================================================
     # 매수 가능여부 확인 및 매수 진행
@@ -231,47 +248,31 @@ def auto_buy_sell(item_code, item_dict, kw):
         kw.send_order('send_order_req', '0101', account_number, 1, item_code, item_dict["buy_target_num"], item_dict['current_price'],
                       hoga_lookup[item_dict["buy_type"]], '')
 
-        time.sleep(0.5)
+        time.sleep(1.2)
+
+        # 매수시 거래량 속도 저장
+        item_dict['buying_time_accel'] = item_dict['cur_vol_accel']
+
 
         # 매수 후 잠시 후 주문취소 (미체결에 대한 주문취소) - 일단 시장가로 대응할거라서..미체결은 없다.
         # time.sleep(0.5)
         # to do
 
-        # 매수시 거래량 속도 저장
-        item_dict['buying_time_accel'] = item_dict['cur_vol_accel']
-
-        # 체결이 되면 체결된 수량 및 매수가 item_dict 에 업데이트
-        kw.profit_dict = {}
-        kw.set_input_value("계좌번호", account_number)
-        kw.comm_rq_data("opt10085_req", "opt10085", 0, "2000")
-
-        if kw.profit_dict.get(item_code) is not None:
-            item_dict["chejango"] = kw.profit_dict[item_code]["chejan"]
-            item_dict["buying_time_price"] = kw.profit_dict[item_code]["buying_price"]
-
-
 
     # ===========================================================================
     # 매도 가능여부 확인 및 매도 진행
     # ===========================================================================
-    if is_sellable(item_code, item_dict, kw) and item_dict["chejango"] > 0:
+    if item_dict["chejango"] > 0 and is_sellable(item_code, item_dict, kw):
         hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
-        kw.send_order('send_order_req', '0101', account_number, 1, item_code, item_dict["chejango"],
+        kw.send_order('send_order_req', '0101', account_number, 2, item_code, item_dict["chejango"],
                       item_dict['current_price'],
                       hoga_lookup[item_dict["sell_type"]], '')
 
-        time.sleep(0.5)
+        time.sleep(1.2)
 
         # 시장가 매도가 아닌경우 매도 루프 만들어야 한다.
 
-        # 체결이 되면 체결된 수량 및 매수가 item_dict 에 업데이트
-        kw.profit_dict = {}
-        kw.set_input_value("계좌번호", account_number)
-        kw.comm_rq_data("opt10085_req", "opt10085", 0, "2000")
 
-        if kw.profit_dict.get(item_code) is not None:
-            item_dict["chejango"] = kw.profit_dict[item_code]["chejan"]
-            item_dict["buying_time_price"] = 0
 
     time.sleep(1.5)
 
@@ -332,7 +333,5 @@ if __name__ == "__main__":
                                'buying_time_accel': 0, 'chejango': 0, 'buying_time_price': 0}
 
         auto_buy_sell(code, item_dict[code], kw)
-
-
 
     app.quit()
