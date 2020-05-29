@@ -182,8 +182,6 @@ def auto_buy_sell(item_code, item_dict, kw):
 
 
 
-
-
     # ===========================================================================
     # 현재 시점 기준 MAX_VOL_BUCKET 초간 거래량 및 거래량 속도 (큐 사용)
     # 전 분봉 정보 - 가격, 거래량, 전 분봉 거래량 속도
@@ -254,6 +252,7 @@ def auto_buy_sell(item_code, item_dict, kw):
         # 매수시 거래량 속도 저장
         item_dict['buying_time_accel'] = item_dict['cur_vol_accel']
 
+        time.sleep(0.5)
 
         # 매수 후 잠시 후 주문취소 (미체결에 대한 주문취소) - 일단 시장가로 대응할거라서..미체결은 없다.
         # time.sleep(0.5)
@@ -269,13 +268,13 @@ def auto_buy_sell(item_code, item_dict, kw):
                       item_dict['current_price'],
                       hoga_lookup[item_dict["sell_type"]], '')
 
-        time.sleep(1.2)
+        time.sleep(1.7)
 
         # 시장가 매도가 아닌경우 매도 루프 만들어야 한다.
 
 
 
-    time.sleep(1.5)
+    time.sleep(1.7)
 
 
 
