@@ -15,8 +15,7 @@ import util
 MAX_VOL_BUCKET = 8                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
 MAX_ACCEL_COUNT = 10                    # volume accel history 저장 갯수
 STD_MIN_BONG = 1                        # 기준 분봉
-STD_BUYABLE_ACCEL_SCALE = 5             # 전봉 대비 매수 가능 거래속도 배율. 종목별로 설정되어야 한다.
-STD_MIN_ACCEL_LEVEL = 500               # 절대적 거래량 속도 기준 (항상 이 속도 이상이 되어야 한다.) 종목별로 설정해야 할듯
+STD_BUYABLE_ACCEL_SCALE = 5             # 전봉 대비 매수 가능 거래속도 배율. (종목별로 설정되어야 한다.)
 STD_CUT_MIN_ACCEL_RATIO = 0.5           # 절대적 매도를 위한 전봉 비교를 위한 현재 거래량 속도 대비 비율
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
 STD_CUT_BUYING_PRICE_RATIO = 0.2        # 매수가 아래 2% 까지 허용
@@ -48,7 +47,8 @@ def is_buyable(item_code, item_dict, kw):
     # 거래량 배율 조건이 맞더라도 최소 거래량 속도를 만족해야 한다.
     # ===========================================================================
     cur_accel = item_dict["cur_vol_accel"]
-    if cur_accel < STD_MIN_ACCEL_LEVEL:
+    min_vol_accel = item_dict["min_vol_accel"]
+    if cur_accel < min_vol_accel:
         false_cnt += 1
 
     # ===========================================================================
@@ -65,7 +65,7 @@ def is_buyable(item_code, item_dict, kw):
 
     print("02, %s, 잔고: %s, 현속도: %s, 전봉속도*배율: %s, 전전봉속도*배율: %s, 전전전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s "
           % (false_idx, chejango, round(cur_accel), round(prev1_accel * STD_BUYABLE_ACCEL_SCALE), round(prev2_accel * STD_BUYABLE_ACCEL_SCALE),
-             round(prev3_accel * STD_BUYABLE_ACCEL_SCALE), STD_MIN_ACCEL_LEVEL, cur_real_price, cur_min_bong_open_price))
+             round(prev3_accel * STD_BUYABLE_ACCEL_SCALE), min_vol_accel, cur_real_price, cur_min_bong_open_price))
 
     if false_cnt == 0:
         return True
@@ -202,6 +202,7 @@ def auto_buy_sell(item_code, item_dict, kw):
     buying_time_accel = 0 # 매수시 거래량 속도
     buying_time_price = 0 # 매수가
     chejango = 0 # 잔고정보
+    min_vol_accel = 0 # 종목별 최소 매수 거래속도
     '''
 
     item_dict['current_price'] = abs(df_min['cur'][0])
@@ -303,6 +304,7 @@ if __name__ == "__main__":
     buying_time_accel = 0 # 매수시 거래량
     buying_time_price = 0 # 매수가
     chejango = 0 # 잔고정보
+    min_vol_accel = 0 # 종목별 최소 매수 거래속도
     '''
     item_dict = {}
 
@@ -320,6 +322,7 @@ if __name__ == "__main__":
         buy_price = split_row_data[3]
         min_vol_accel = split_row_data[4]
 
+
         if item_dict.get(code) is None:
             dq_vol = deque()
             dq_time = deque()
@@ -330,7 +333,7 @@ if __name__ == "__main__":
                                'deque_vol_time': dq_time, 'buy_target_num': buy_num,
                                'buy_target_price': buy_price, 'buy_type': buy_type, 'sell_type': buy_type,
                                'min_vol_accel': min_vol_accel, 'name': name,
-                               'buying_time_accel': 0, 'chejango': 0, 'buying_time_price': 0}
+                               'buying_time_accel': 0, 'chejango': 0, 'buying_time_price': 0,}
 
         auto_buy_sell(code, item_dict[code], kw)
 
