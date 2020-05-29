@@ -332,8 +332,8 @@ if __name__ == "__main__":
                                'deque_vol_cum': dq_vol, 'accel_history': dq_accel,
                                'deque_vol_time': dq_time, 'buy_target_num': buy_num,
                                'buy_target_price': buy_price, 'buy_type': buy_type, 'sell_type': buy_type,
-                               'min_vol_accel': min_vol_accel, 'name': name,
-                               'buying_time_accel': 0, 'chejango': 0, 'buying_time_price': 0,}
+                               'min_vol_accel': int(min_vol_accel), 'name': name,
+                               'buying_time_accel': 0, 'chejango': 0, 'buying_time_price': 0}
 
         auto_buy_sell(code, item_dict[code], kw)
 
