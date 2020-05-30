@@ -220,9 +220,9 @@ def auto_buy_sell(item_code, item_dict, kw):
     '''
 
     # 분봉 pandas에 이동평균 정보 추가
-    df_min['ma_short_term'] = abs(df_min['cur']).rolling(window=MA_SHORT_TERM).mean().shift(-1*MA_SHORT_TERM-1)
-    df_min['ma_mid_term'] = abs(df_min['cur']).rolling(window=MA_MID_TERM).mean().shift(-1*MA_MID_TERM-1)
-    df_min['ma_long_term'] = abs(df_min['cur']).rolling(window=MA_LONG_TERM).mean().shift(-1*MA_LONG_TERM-1)
+    df_min['ma_short_term'] = abs(df_min['cur']).rolling(window=MA_SHORT_TERM).mean()
+    df_min['ma_mid_term'] = abs(df_min['cur']).rolling(window=MA_MID_TERM).mean()
+    df_min['ma_long_term'] = abs(df_min['cur']).rolling(window=MA_LONG_TERM).mean()
 
     item_dict['current_price'] = abs(df_min['cur'][0])
     item_dict['open_price'] = abs(df_min['open'][0])
@@ -230,9 +230,9 @@ def auto_buy_sell(item_code, item_dict, kw):
     item_dict['pre_before_min_vol_accel'] = abs(df_min['volume'][2]) / (STD_MIN_BONG * 60)
     item_dict['third_before_min_vol_accel'] = abs(df_min['volume'][3]) / (STD_MIN_BONG * 60)
 
-    item_dict['ma_short_term'] = df_min['ma_short_term'][0]
-    item_dict['ma_mid_term'] = df_min['ma_mid_term'][0]
-    item_dict['ma_long_term'] = df_min['ma_long_term'][0]
+    item_dict['ma_short_term'] = df_min['ma_short_term'][MA_SHORT_TERM-1]
+    item_dict['ma_mid_term'] = df_min['ma_mid_term'][MA_MID_TERM-1]
+    item_dict['ma_long_term'] = df_min['ma_long_term'][MA_LONG_TERM-1]
 
     if len(item_dict['deque_vol_cum']) >= MAX_VOL_BUCKET: # 거래량 버겟을 어느정도 볼 것인가
         item_dict['deque_vol_cum'].pop()
