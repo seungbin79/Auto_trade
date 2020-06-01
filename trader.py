@@ -75,8 +75,8 @@ def is_buyable(item_code, item_dict, kw):
     if false_cnt == 0:
         false_idx = '매수가능'
 
-    print("02, %s, 잔고: %s, 현속도: %s, 전봉속도*배율: %s, 전전봉속도*배율: %s, 전전전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s "
-          % (false_idx, chejango, round(cur_accel), round(prev1_accel * STD_BUYABLE_ACCEL_SCALE), round(prev2_accel * STD_BUYABLE_ACCEL_SCALE),
+    print("02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전봉속도*배율: %s, 전전봉속도*배율: %s, 전전전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s "
+          % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev1_accel * STD_BUYABLE_ACCEL_SCALE), round(prev2_accel * STD_BUYABLE_ACCEL_SCALE),
              round(prev3_accel * STD_BUYABLE_ACCEL_SCALE), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short)))
 
     if false_cnt == 0:
@@ -123,8 +123,8 @@ def is_sellable(item_code, item_dict, kw):
     if false_cnt > 0:
         false_idx = "매도가능"
 
-    print("03, %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s"
-          % (false_idx, item_dict["chejango"], round(buying_time_accel), round(current_accel), round(hist_1), round(hist_2), round(hist_3),
+    print("03, %s, 종목: %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s"
+          % (false_idx, item_dict['name'], item_dict["chejango"], round(buying_time_accel), round(current_accel), round(hist_1), round(hist_2), round(hist_3),
              round(pre_min_vol_accel), buying_price, current_price))
 
     if false_cnt > 0:
@@ -170,14 +170,6 @@ def auto_buy_sell(item_code, item_dict, kw):
     # ===========================================================================
     # 잔고 정보
     # ===========================================================================
-    # kw.profit_dict = {}
-    # kw.set_input_value("계좌번호", account_number)
-    # kw.comm_rq_data("opt10085_req", "opt10085", 0, "2000")
-    #
-    # if kw.profit_dict.get(item_code) is not None:
-    #     item_dict["chejango"] = kw.profit_dict[item_code]["chejan"]
-    #     item_dict["buying_time_price"] = kw.profit_dict[item_code]["buying_price"]
-
     kw.reset_opw00018_output()
     kw.set_input_value("계좌번호", account_number)
     kw.comm_rq_data("opw00018_req", "opw00018", 0, "2000")
@@ -224,23 +216,23 @@ def auto_buy_sell(item_code, item_dict, kw):
     df_min['ma_mid_term'] = abs(df_min['cur']).rolling(window=MA_MID_TERM).mean()
     df_min['ma_long_term'] = abs(df_min['cur']).rolling(window=MA_LONG_TERM).mean()
 
-    item_dict['current_price'] = abs(df_min['cur'][0])
-    item_dict['open_price'] = abs(df_min['open'][0])
-    item_dict['pre_min_vol_accel'] = abs(df_min['volume'][1])/60
-    item_dict['pre_before_min_vol_accel'] = abs(df_min['volume'][2]) / (STD_MIN_BONG * 60)
-    item_dict['third_before_min_vol_accel'] = abs(df_min['volume'][3]) / (STD_MIN_BONG * 60)
+    item_dict['current_price'] = abs(df_min['cur'].iloc[0])
+    item_dict['open_price'] = abs(df_min['open'].iloc[0])
+    item_dict['pre_min_vol_accel'] = abs(df_min['volume'].iloc[1])/60
+    item_dict['pre_before_min_vol_accel'] = abs(df_min['volume'].iloc[2]) / (STD_MIN_BONG * 60)
+    item_dict['third_before_min_vol_accel'] = abs(df_min['volume'].iloc[3]) / (STD_MIN_BONG * 60)
 
-    item_dict['ma_short_term'] = df_min['ma_short_term'][MA_SHORT_TERM-1]
-    item_dict['ma_mid_term'] = df_min['ma_mid_term'][MA_MID_TERM-1]
-    item_dict['ma_long_term'] = df_min['ma_long_term'][MA_LONG_TERM-1]
+    item_dict['ma_short_term'] = df_min['ma_short_term'].iloc[MA_SHORT_TERM-1]
+    item_dict['ma_mid_term'] = df_min['ma_mid_term'].iloc[MA_MID_TERM-1]
+    item_dict['ma_long_term'] = df_min['ma_long_term'].iloc[MA_LONG_TERM-1]
 
     if len(item_dict['deque_vol_cum']) >= MAX_VOL_BUCKET: # 거래량 버겟을 어느정도 볼 것인가
         item_dict['deque_vol_cum'].pop()
-        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'][0]))
+        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'].iloc[0]))
         item_dict['deque_vol_time'].pop()
         item_dict['deque_vol_time'].appendleft(time.time())
     else:
-        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'][0]))
+        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'].iloc[0]))
         item_dict['deque_vol_time'].appendleft(time.time())
 
     # 거래량 속도 계산
@@ -260,7 +252,7 @@ def auto_buy_sell(item_code, item_dict, kw):
 
     # 콘솔 출력
     print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " %
-          (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'][1])), round(abs(df_min['volume'][0])), round(abs(df_day['volume'][0])),
+          (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'].iloc[1])), round(abs(df_min['volume'].iloc[0])), round(abs(df_day['volume'].iloc[0])),
            round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'], round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']), round(item_dict['ma_long_term'])))
 
     # ===========================================================================
@@ -294,7 +286,6 @@ def auto_buy_sell(item_code, item_dict, kw):
         time.sleep(1.7)
 
         # 시장가 매도가 아닌경우 매도 루프 만들어야 한다.
-
 
 
     time.sleep(2)
