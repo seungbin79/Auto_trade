@@ -12,7 +12,7 @@ import time
 from collections import deque
 import util
 
-MAX_VOL_BUCKET = 8                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
+MAX_VOL_BUCKET = 5                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
 MAX_ACCEL_COUNT = 10                    # volume accel history 저장 갯수
 MA_SHORT_TERM = 11                      # 단기구간 이평 범위
 MA_MID_TERM = 54                        # 중기구간 이평 범위
@@ -21,7 +21,7 @@ STD_MIN_BONG = 1                        # 기준 분봉
 STD_BUYABLE_ACCEL_SCALE = 5             # 전봉 대비 매수 가능 거래속도 배율. (종목별로 설정되어야 한다.)
 STD_CUT_MIN_ACCEL_RATIO = 0.5           # 절대적 매도를 위한 전봉 비교를 위한 현재 거래량 속도 대비 비율
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
-STD_CUT_BUYING_PRICE_RATIO = 0.2        # 매수가 아래 2% 까지 허용
+STD_CUT_BUYING_PRICE_RATIO = 0.02       # 매수가 아래 2% 까지 허용
 
 
 def is_buyable(item_code, item_dict, kw):
@@ -88,13 +88,17 @@ def is_buyable(item_code, item_dict, kw):
 def is_sellable(item_code, item_dict, kw):
     false_cnt = 0
 
+    # ===========================================================================
     # 매수시 거래량 속도보다 현재 속도가 현저히 줄어드는 경우
+    # ===========================================================================
     buying_time_accel = item_dict['buying_time_accel']
     current_accel = item_dict['cur_vol_accel']
     if buying_time_accel * STD_CUT_BUYING_TIME_ACCEL_RATIO >= current_accel:
         false_cnt += 1
 
+    # ===========================================================================
     # 거래량 속도가 줄어드는 경우 accel_history 4 단계 연속으로 빠지는 경우
+    # ===========================================================================
     accel_hist = item_dict['accel_history']
     hist_1 = -999
     hist_2 = -999
@@ -106,13 +110,17 @@ def is_sellable(item_code, item_dict, kw):
         if (accel_hist[0] <= hist_1) and (hist_1 <= hist_2) and (hist_2 <= hist_3):
            false_cnt += 1
 
+    # ===========================================================================
     # 전 분봉 속도 대비 accel이 현저희 낮을 때
+    # ===========================================================================
     pre_min_vol_accel = item_dict['pre_min_vol_accel']
     current_accel = item_dict['cur_vol_accel']
     if pre_min_vol_accel * STD_CUT_MIN_ACCEL_RATIO >= current_accel:
         false_cnt += 1
 
+    # ===========================================================================
     # 가격이 매입가 보다 절대수치% 만큼 빠진 경우
+    # ===========================================================================
     buying_price = item_dict["buying_time_price"]
     current_price = item_dict['current_price']
     if buying_price * (1 - STD_CUT_BUYING_PRICE_RATIO) >= current_price:
@@ -149,6 +157,17 @@ def auto_buy_sell(item_code, item_dict, kw):
     df_min = pd.DataFrame(kw.one_min_price, columns=['open', 'high', 'low', 'cur', 'volume'],
                           index=kw.one_min_price['date'])
 
+    while df_min.index.size == 0:
+        print('not found min. data...try again...')
+        time.sleep(0.2)
+        kw.set_input_value("종목코드", item_code)
+        kw.set_input_value("틱범위", STD_MIN_BONG)
+        kw.set_input_value("수정주가구분", 1)
+        kw.comm_rq_data("opt10080_req", "opt10080", 0, "0101")
+
+        df_min = pd.DataFrame(kw.one_min_price, columns=['open', 'high', 'low', 'cur', 'volume'],
+                              index=kw.one_min_price['date'])
+
     #print(df_min)
 
     # ===========================================================================
@@ -164,6 +183,17 @@ def auto_buy_sell(item_code, item_dict, kw):
 
     df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
                           index=kw.ohlcv['date'])
+
+    while df_day.index.size == 0:
+        print('not found day. data...try again...')
+        time.sleep(0.2)
+        kw.set_input_value("종목코드", item_code)
+        kw.set_input_value("기준일자", today)
+        kw.set_input_value("수정주가구분", 1)
+        kw.comm_rq_data("opt10081_req", "opt10081", 0, "0101")
+
+        df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
+                              index=kw.ohlcv['date'])
 
     #print(df_day)
 
