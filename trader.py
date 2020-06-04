@@ -12,8 +12,10 @@ import time
 from collections import deque
 import util
 
-MAX_VOL_BUCKET = 5                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
+MAX_VOL_BUCKET = 4                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
+MAX_PRICE_BUCKET = 3                    # Price 최대 deque 저장
 MAX_ACCEL_COUNT = 10                    # volume accel history 저장 갯수
+MAX_GRADI_COUNT = 3                     # Gradient history 최대 저장 갯수
 MA_SHORT_TERM = 11                      # 단기구간 이평 범위
 MA_MID_TERM = 54                        # 중기구간 이평 범위
 MA_LONG_TERM = 105                      # 장기구간 이평 범위
@@ -71,13 +73,20 @@ def is_buyable(item_code, item_dict, kw):
     if cur_min_bong_open_price > cur_real_price:
         false_cnt += 1
 
+    # ===========================================================================
+    # 가격 기울기 현황 합이 양수 이어야 한다.
+    # ===========================================================================
+    sum_gradient = sum(item_dict['price_gradient_history'])
+    if sum_gradient < 0:
+        false_cnt += 1
+
     false_idx = '매수불가'
     if false_cnt == 0:
         false_idx = '매수가능'
 
-    print("02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전봉속도*배율: %s, 전전봉속도*배율: %s, 전전전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s "
+    print("02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전봉속도*배율: %s, 전전봉속도*배율: %s, 전전전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 기울기합: %s "
           % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev1_accel * STD_BUYABLE_ACCEL_SCALE), round(prev2_accel * STD_BUYABLE_ACCEL_SCALE),
-             round(prev3_accel * STD_BUYABLE_ACCEL_SCALE), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short)))
+             round(prev3_accel * STD_BUYABLE_ACCEL_SCALE), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), sum_gradient))
 
     if false_cnt == 0:
         return True
@@ -126,14 +135,20 @@ def is_sellable(item_code, item_dict, kw):
     if buying_price * (1 - STD_CUT_BUYING_PRICE_RATIO) >= current_price:
         false_cnt += 1
 
+    # ===========================================================================
+    # 가격 기울기 합이 음수인 경우
+    # ===========================================================================
+    sum_gradient = sum(item_dict['price_gradient_history'])
+    if sum_gradient < 0:
+        false_cnt += 1
 
     false_idx = "매도불가"
     if false_cnt > 0:
         false_idx = "매도가능"
 
-    print("03, %s, 종목: %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s"
+    print("03, %s, 종목: %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s, 기울기합: %s"
           % (false_idx, item_dict['name'], item_dict["chejango"], round(buying_time_accel), round(current_accel), round(hist_1), round(hist_2), round(hist_3),
-             round(pre_min_vol_accel), buying_price, current_price))
+             round(pre_min_vol_accel), buying_price, current_price, sum_gradient))
 
     if false_cnt > 0:
         return True
@@ -194,6 +209,7 @@ def auto_buy_sell(item_code, item_dict, kw):
 
         df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
                               index=kw.ohlcv['date'])
+
 
     #print(df_day)
 
@@ -265,6 +281,15 @@ def auto_buy_sell(item_code, item_dict, kw):
         item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'].iloc[0]))
         item_dict['deque_vol_time'].appendleft(time.time())
 
+    if len(item_dict['deque_price']) >= MAX_PRICE_BUCKET: # price 버겟을 어느정도 볼 것인가
+        item_dict['deque_price'].pop()
+        item_dict['deque_price'].appendleft(abs(df_min['cur'].iloc[0]))
+        item_dict['deque_price_time'].pop()
+        item_dict['deque_price_time'].appendleft(time.time())
+    else:
+        item_dict['deque_price'].appendleft(abs(df_min['cur'].iloc[0]))
+        item_dict['deque_price_time'].appendleft(time.time())
+
     # 거래량 속도 계산
     accel = 0
     if max(item_dict['deque_vol_time']) - min(item_dict['deque_vol_time']) == 0: # 분모가 0 이면 안된다.
@@ -280,10 +305,26 @@ def auto_buy_sell(item_code, item_dict, kw):
     else:
         item_dict['accel_history'].appendleft(accel)
 
+    # 가격 기울기 계산
+    deque_price_size = len(item_dict['deque_price'])
+    gradi = 0
+    if (item_dict['deque_price'][0] - item_dict['deque_price'][deque_price_size-1]) != 0:
+        gradi = (item_dict['deque_price'][0] - item_dict['deque_price'][deque_price_size-1]) / ((item_dict['deque_price_time'][0] - item_dict['deque_price_time'][deque_price_size-1]))
+    item_dict['price_gradient'] = gradi
+
+    #가격 기울기 히스토리 저장
+    if len(item_dict['price_gradient_history']) >= MAX_GRADI_COUNT:
+        item_dict['price_gradient_history'].pop()
+        item_dict['price_gradient_history'].appendleft(accel)
+    else:
+        item_dict['price_gradient_history'].appendleft(accel)
+
     # 콘솔 출력
     print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " %
           (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'].iloc[1])), round(abs(df_min['volume'].iloc[0])), round(abs(df_day['volume'].iloc[0])),
            round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'], round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']), round(item_dict['ma_long_term'])))
+    print('01, 종목: %s, 현기울기: %s, 가격현황: %s, 기울기현황: %s'
+          % (item_dict['name'], item_dict['price_gradient'], item_dict['deque_price'], item_dict['price_gradient_history']))
 
     # ===========================================================================
     # 매수 가능여부 확인 및 매수 진행
@@ -318,7 +359,7 @@ def auto_buy_sell(item_code, item_dict, kw):
         # 시장가 매도가 아닌경우 매도 루프 만들어야 한다.
 
 
-    time.sleep(2)
+    time.sleep(4.5)
 
 
 
@@ -373,6 +414,10 @@ if __name__ == "__main__":
             dq_vol = deque()
             dq_time = deque()
             dq_accel = deque()
+            dq_price = deque()
+            dq_date = deque()
+            dq_gradi = deque()
+
             item_dict[code] = {'current_price': 0, 'open_price': 0, 'pre_min_vol_accel': 0,
                                'pre_before_min_vol_accel': 0, 'third_before_min_vol_accel': 0,
                                'deque_vol_cum': dq_vol, 'accel_history': dq_accel,
@@ -380,7 +425,9 @@ if __name__ == "__main__":
                                'buy_target_price': buy_price, 'buy_type': buy_type, 'sell_type': buy_type,
                                'min_vol_accel': int(min_vol_accel), 'name': name,
                                'buying_time_accel': 0, 'chejango': 0, 'buying_time_price': 0,
-                               'ma_short_term': 0, 'ma_mid_term': 0, 'ma_long_term': 0
+                               'ma_short_term': 0, 'ma_mid_term': 0, 'ma_long_term': 0,
+                               'deque_price': dq_price, 'deque_price_time': dq_date, 'price_gradient': 0,
+                               'price_gradient_history': dq_gradi
                                }
 
         auto_buy_sell(code, item_dict[code], kw)
