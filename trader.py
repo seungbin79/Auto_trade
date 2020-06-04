@@ -315,9 +315,9 @@ def auto_buy_sell(item_code, item_dict, kw):
     #가격 기울기 히스토리 저장
     if len(item_dict['price_gradient_history']) >= MAX_GRADI_COUNT:
         item_dict['price_gradient_history'].pop()
-        item_dict['price_gradient_history'].appendleft(accel)
+        item_dict['price_gradient_history'].appendleft(gradi)
     else:
-        item_dict['price_gradient_history'].appendleft(accel)
+        item_dict['price_gradient_history'].appendleft(gradi)
 
     # 콘솔 출력
     print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " %
