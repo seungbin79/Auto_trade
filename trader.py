@@ -15,7 +15,7 @@ import util
 MAX_VOL_BUCKET = 4                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
 MAX_PRICE_BUCKET = 3                    # Price 최대 deque 저장
 MAX_ACCEL_COUNT = 10                    # volume accel history 저장 갯수
-MAX_GRADI_COUNT = 3                     # Gradient history 최대 저장 갯수
+MAX_GRADI_COUNT = 5                     # Gradient history 최대 저장 갯수
 MA_SHORT_TERM = 11                      # 단기구간 이평 범위
 MA_MID_TERM = 54                        # 중기구간 이평 범위
 MA_LONG_TERM = 105                      # 장기구간 이평 범위
@@ -310,6 +310,7 @@ def auto_buy_sell(item_code, item_dict, kw):
     gradi = 0
     if (item_dict['deque_price'][0] - item_dict['deque_price'][deque_price_size-1]) != 0:
         gradi = (item_dict['deque_price'][0] - item_dict['deque_price'][deque_price_size-1]) / ((item_dict['deque_price_time'][0] - item_dict['deque_price_time'][deque_price_size-1]))
+    gradi = round(gradi, 3)
     item_dict['price_gradient'] = gradi
 
     #가격 기울기 히스토리 저장
