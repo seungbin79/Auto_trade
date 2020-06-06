@@ -36,7 +36,7 @@ def cal_accel_multiple(accel, item_dict):
     elif item_dict['std_accel_3'] <= accel < item_dict['std_accel_4']:
         accel_scale = accel * item_dict['std_accel_4_multiple']
     else:
-        accel_scale = 0
+        accel_scale = accel * item_dict['std_accel_4_multiple']
 
     return accel_scale
 
