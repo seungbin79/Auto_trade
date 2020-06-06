@@ -20,11 +20,25 @@ MA_SHORT_TERM = 11                      # 단기구간 이평 범위
 MA_MID_TERM = 54                        # 중기구간 이평 범위
 MA_LONG_TERM = 105                      # 장기구간 이평 범위
 STD_MIN_BONG = 1                        # 기준 분봉
-STD_BUYABLE_ACCEL_SCALE = 5             # 전봉 대비 매수 가능 거래속도 배율. (종목별로 설정되어야 한다.)
+STD_BUYABLE_ACCEL_SCALE = 7             # 전봉 대비 매수 가능 거래속도 배율. (종목별로 설정되어야 한다.)
 STD_CUT_MIN_ACCEL_RATIO = 0.5           # 절대적 매도를 위한 전봉 비교를 위한 현재 거래량 속도 대비 비율
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
 STD_CUT_BUYING_PRICE_RATIO = 0.02       # 매수가 아래 2% 까지 허용
 
+def cal_accel_multiple(accel, item_dict):
+    accel_scale = 0
+    if accel < item_dict['std_accel_1']:
+        accel_scale = accel * item_dict['std_accel_1_multiple']
+    elif item_dict['std_accel_1'] <= accel < item_dict['std_accel_2']:
+        accel_scale = accel * item_dict['std_accel_2_multiple']
+    elif item_dict['std_accel_2'] <= accel < item_dict['std_accel_3']:
+        accel_scale = accel * item_dict['std_accel_3_multiple']
+    elif item_dict['std_accel_3'] <= accel < item_dict['std_accel_4']:
+        accel_scale = accel * item_dict['std_accel_4_multiple']
+    else:
+        accel_scale = 0
+
+    return accel_scale
 
 def is_buyable(item_code, item_dict, kw):
     # false_cnt = 0 이면 매수 조건이 부합됨을 의미 아닌 경우 매수 조건 안됨
@@ -39,14 +53,20 @@ def is_buyable(item_code, item_dict, kw):
 
     # ===========================================================================
     # 현재 거래량 속도가 전분봉 속도 -> 전전 분봉속도 -> 전전전 분봉속도 대비 거래량 배율 조건이 맞아야 한다.
+    # 거래량 속도 구간에 따라 곱해지는 배율이 달라진다.
     # ===========================================================================
     cur_accel = item_dict["cur_vol_accel"]
     prev1_accel = item_dict["pre_min_vol_accel"]
     prev2_accel = item_dict["pre_before_min_vol_accel"]
     prev3_accel = item_dict["third_before_min_vol_accel"]
-    if ((cur_accel < prev1_accel * STD_BUYABLE_ACCEL_SCALE) and
-        (cur_accel < prev2_accel * STD_BUYABLE_ACCEL_SCALE) and
-        (cur_accel < prev3_accel * STD_BUYABLE_ACCEL_SCALE)):
+
+    prev1_accel_scale = cal_accel_multiple(prev1_accel, item_dict)
+    prev2_accel_scale = cal_accel_multiple(prev2_accel, item_dict)
+    prev3_accel_scale = cal_accel_multiple(prev3_accel, item_dict)
+
+    if ((cur_accel < prev1_accel_scale) and
+        (cur_accel < prev2_accel_scale) and
+        (cur_accel < prev3_accel_scale)):
         false_cnt += 1
 
     # ===========================================================================
@@ -84,9 +104,9 @@ def is_buyable(item_code, item_dict, kw):
     if false_cnt == 0:
         false_idx = '매수가능'
 
-    print("02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전봉속도*배율: %s, 전전봉속도*배율: %s, 전전전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 기울기합: %s "
-          % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev1_accel * STD_BUYABLE_ACCEL_SCALE), round(prev2_accel * STD_BUYABLE_ACCEL_SCALE),
-             round(prev3_accel * STD_BUYABLE_ACCEL_SCALE), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), sum_gradient))
+    print("02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 기울기합: %s "
+          % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev3_accel_scale), round(prev2_accel_scale),
+             round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), sum_gradient))
 
     if false_cnt == 0:
         return True
@@ -238,25 +258,6 @@ def auto_buy_sell(item_code, item_dict, kw):
     # 전 분봉 정보 - 가격, 거래량, 전 분봉 거래량 속도
     # ===========================================================================
 
-    '''
-    current_price = 0  # 현재 가격
-    open_price = 0  # 현재 분봉의 시가
-    pre_min_vol_accel = 0  # 전 분봉의 거래량 속도
-    pre_before_min_vol_accel = 0  # 전전 분봉의 거래량 속도
-    third_before_min_vol_accel = 0 # 전전전 분봉의 거래량 속도
-    deque_vol_cum = deque 당일 기준 누적 거래량 snapshot
-    deque_vol_time = deque time.time() -- 끝 정수가 (초) snapshot 시간 
-    cur_vol_accel = 0  # 현재 거래량 속도 (10초 기준)
-    accel_history = 0  # 거래량 속도 저장 
-    buying_time_accel = 0 # 매수시 거래량 속도
-    buying_time_price = 0 # 매수가
-    chejango = 0 # 잔고정보
-    min_vol_accel = 0 # 종목별 최소 매수 거래속도
-    ma_short_term = 0 # 단기구간 이동평균
-    ma_mid_term = 0 # 중기구간
-    ma_long_term = 0 # 장기구간
-    '''
-
     # 분봉 pandas에 이동평균 정보 추가
     df_min['ma_short_term'] = abs(df_min['cur']).rolling(window=MA_SHORT_TERM).mean()
     df_min['ma_mid_term'] = abs(df_min['cur']).rolling(window=MA_MID_TERM).mean()
@@ -321,11 +322,12 @@ def auto_buy_sell(item_code, item_dict, kw):
         item_dict['price_gradient_history'].appendleft(gradi)
 
     # 콘솔 출력
-    print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " %
+    print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " %
           (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'].iloc[1])), round(abs(df_min['volume'].iloc[0])), round(abs(df_day['volume'].iloc[0])),
-           round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'], round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']), round(item_dict['ma_long_term'])))
+           round(item_dict['third_before_min_vol_accel']), round(item_dict['pre_before_min_vol_accel']), round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'],
+           round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']), round(item_dict['ma_long_term'])))
     print('01, 종목: %s, 현기울기: %s, 가격현황: %s, 기울기현황: %s'
-          % (item_dict['name'], item_dict['price_gradient'], item_dict['deque_price'], item_dict['price_gradient_history']))
+          % (item_dict['name'], item_dict['price_gradient'], list(item_dict['deque_price']), list(item_dict['price_gradient_history'])))
 
     # ===========================================================================
     # 매수 가능여부 확인 및 매수 진행
@@ -359,7 +361,7 @@ def auto_buy_sell(item_code, item_dict, kw):
 
         # 시장가 매도가 아닌경우 매도 루프 만들어야 한다.
 
-
+    print('')
     time.sleep(4.5)
 
 
@@ -375,24 +377,27 @@ if __name__ == "__main__":
     buy_list = f.readlines()
     f.close()
 
-
     '''
-    current_price = 0  # 현재 가격
-    open_price = 0  # 현재 분봉의 시가
-    pre_min_vol_accel = 0  # 전 분봉의 거래량 속도
-    pre_before_min_vol_accel = 0  # 전전 분봉의 거래량 속도
-    third_before_min_vol_accel = 0 # 전전전 분봉의 거래량 속도
-    deque_vol_cum = deque 당일 기준 누적 거래량 snapshot
-    deque_vol_time = deque time.time() -- 끝 정수가 (초) snapshot 시간 
-    cur_vol_accel = 0  # 현재 거래량 속도 (10초 기준)
-    accel_history = 0  # 거래량 속도 저장 
-    buying_time_accel = 0 # 매수시 거래량
-    buying_time_price = 0 # 매수가
-    chejango = 0 # 잔고정보
-    min_vol_accel = 0 # 종목별 최소 매수 거래속도
-    ma_short_term = 0 # 단기구간 이동평균
-    ma_mid_term = 0 # 중기구간
-    ma_long_term = 0 # 장기구간
+    current_price = 0                       # 현재 가격
+    open_price = 0                          # 현재 분봉의 시가
+    pre_min_vol_accel = 0                   # 전 분봉의 거래량 속도
+    pre_before_min_vol_accel = 0            # 전전 분봉의 거래량 속도
+    third_before_min_vol_accel = 0          # 전전전 분봉의 거래량 속도
+    deque_vol_cum = deque                   # 당일 기준 누적 거래량 snapshot
+    deque_vol_time = deque time.time() --   # 끝 정수가 (초) snapshot 시간 
+    cur_vol_accel = 0                       # 현재 거래량 속도 (10초 기준)
+    accel_history = 0                       # 거래량 속도 저장 
+    buying_time_accel = 0                   # 매수시 거래량
+    buying_time_price = 0                   # 매수가
+    chejango = 0                            # 잔고정보
+    min_vol_accel = 0                       # 종목별 최소 매수 거래속도
+    ma_short_term = 0                       # 단기구간 이동평균
+    ma_mid_term = 0                         # 중기구간
+    ma_long_term = 0                        # 장기구간
+    'deque_price': dq_price,                # 햔제기격 저장 큐
+    'deque_price_time': dq_date,            # 현재가격 저장 시간 큐
+    'price_gradient': 0,                    # 현재가격에 대한 기울기 (MAX_PRICE_BUCKET 기준)
+    'price_gradient_history': dq_gradi      # 가격 기울기 저장 history
     '''
     item_dict = {}
 
@@ -409,6 +414,14 @@ if __name__ == "__main__":
         buy_num = split_row_data[2]
         buy_price = split_row_data[3]
         min_vol_accel = split_row_data[4]
+        std_accel_1 = split_row_data[5]
+        std_accel_1_multiple = split_row_data[6]
+        std_accel_2 = split_row_data[7]
+        std_accel_2_multiple = split_row_data[8]
+        std_accel_3 = split_row_data[9]
+        std_accel_3_multiple = split_row_data[10]
+        std_accel_4 = split_row_data[11]
+        std_accel_4_multiple = split_row_data[12]
 
 
         if item_dict.get(code) is None:
@@ -419,16 +432,38 @@ if __name__ == "__main__":
             dq_date = deque()
             dq_gradi = deque()
 
-            item_dict[code] = {'current_price': 0, 'open_price': 0, 'pre_min_vol_accel': 0,
-                               'pre_before_min_vol_accel': 0, 'third_before_min_vol_accel': 0,
-                               'deque_vol_cum': dq_vol, 'accel_history': dq_accel,
-                               'deque_vol_time': dq_time, 'buy_target_num': buy_num,
-                               'buy_target_price': buy_price, 'buy_type': buy_type, 'sell_type': buy_type,
-                               'min_vol_accel': int(min_vol_accel), 'name': name,
-                               'buying_time_accel': 0, 'chejango': 0, 'buying_time_price': 0,
-                               'ma_short_term': 0, 'ma_mid_term': 0, 'ma_long_term': 0,
-                               'deque_price': dq_price, 'deque_price_time': dq_date, 'price_gradient': 0,
-                               'price_gradient_history': dq_gradi
+            item_dict[code] = {'current_price': 0,
+                               'open_price': 0,
+                               'pre_min_vol_accel': 0,
+                               'pre_before_min_vol_accel': 0,
+                               'third_before_min_vol_accel': 0,
+                               'deque_vol_cum': dq_vol,
+                               'accel_history': dq_accel,
+                               'deque_vol_time': dq_time,
+                               'buy_target_num': buy_num,
+                               'buy_target_price': buy_price,
+                               'buy_type': buy_type,
+                               'sell_type': buy_type,
+                               'min_vol_accel': int(min_vol_accel),
+                               'name': name,
+                               'buying_time_accel': 0,
+                               'chejango': 0,
+                               'buying_time_price': 0,
+                               'ma_short_term': 0,
+                               'ma_mid_term': 0,
+                               'ma_long_term': 0,
+                               'deque_price': dq_price,
+                               'deque_price_time': dq_date,
+                               'price_gradient': 0,
+                               'price_gradient_history': dq_gradi,
+                               'std_accel_1': int(std_accel_1),
+                               'std_accel_1_multiple': int(std_accel_1_multiple),
+                               'std_accel_2': int(std_accel_2),
+                               'std_accel_2_multiple': int(std_accel_2_multiple),
+                               'std_accel_3': int(std_accel_3),
+                               'std_accel_3_multiple': int(std_accel_3_multiple),
+                               'std_accel_4': int(std_accel_4),
+                               'std_accel_4_multiple': int(std_accel_4_multiple),
                                }
 
         auto_buy_sell(code, item_dict[code], kw)
