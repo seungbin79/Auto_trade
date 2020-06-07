@@ -27,16 +27,16 @@ STD_CUT_BUYING_PRICE_RATIO = 0.02       # 매수가 아래 2% 까지 허용
 
 def cal_accel_multiple(accel, item_dict):
     accel_scale = 0
-    if accel < item_dict['std_accel_1']:
+    if accel < item_dict['std_accel_1_bound']:
         accel_scale = accel * item_dict['std_accel_1_multiple']
-    elif item_dict['std_accel_1'] <= accel < item_dict['std_accel_2']:
+    elif item_dict['std_accel_1_bound'] <= accel < item_dict['std_accel_2_bound']:
         accel_scale = accel * item_dict['std_accel_2_multiple']
-    elif item_dict['std_accel_2'] <= accel < item_dict['std_accel_3']:
+    elif item_dict['std_accel_2_bound'] <= accel < item_dict['std_accel_3_bound']:
         accel_scale = accel * item_dict['std_accel_3_multiple']
-    elif item_dict['std_accel_3'] <= accel < item_dict['std_accel_4']:
+    elif item_dict['std_accel_3_bound'] <= accel < item_dict['std_accel_4_bound']:
         accel_scale = accel * item_dict['std_accel_4_multiple']
     else:
-        accel_scale = accel * item_dict['std_accel_4_multiple']
+        accel_scale = accel * item_dict['std_accel_5_multiple']
 
     return accel_scale
 
@@ -414,14 +414,17 @@ if __name__ == "__main__":
         buy_num = split_row_data[2]
         buy_price = split_row_data[3]
         min_vol_accel = split_row_data[4]
-        std_accel_1 = split_row_data[5]
-        std_accel_1_multiple = split_row_data[6]
-        std_accel_2 = split_row_data[7]
-        std_accel_2_multiple = split_row_data[8]
-        std_accel_3 = split_row_data[9]
-        std_accel_3_multiple = split_row_data[10]
-        std_accel_4 = split_row_data[11]
-        std_accel_4_multiple = split_row_data[12]
+
+        std_accel_1_multiple = split_row_data[5]
+        std_accel_1_bound = split_row_data[6]
+        std_accel_2_multiple = split_row_data[7]
+        std_accel_2_bound = split_row_data[8]
+        std_accel_3_multiple = split_row_data[9]
+        std_accel_3_bound = split_row_data[10]
+        std_accel_4_multiple = split_row_data[11]
+        std_accel_4_bound = split_row_data[12]
+        std_accel_5_multiple = split_row_data[13]
+
 
 
         if item_dict.get(code) is None:
@@ -456,14 +459,15 @@ if __name__ == "__main__":
                                'deque_price_time': dq_date,
                                'price_gradient': 0,
                                'price_gradient_history': dq_gradi,
-                               'std_accel_1': int(std_accel_1),
                                'std_accel_1_multiple': int(std_accel_1_multiple),
-                               'std_accel_2': int(std_accel_2),
+                               'std_accel_1_bound': int(std_accel_1_bound),
                                'std_accel_2_multiple': int(std_accel_2_multiple),
-                               'std_accel_3': int(std_accel_3),
+                               'std_accel_2_bound': int(std_accel_2_bound),
                                'std_accel_3_multiple': int(std_accel_3_multiple),
-                               'std_accel_4': int(std_accel_4),
+                               'std_accel_3_bound': int(std_accel_3_bound),
                                'std_accel_4_multiple': int(std_accel_4_multiple),
+                               'std_accel_4_bound': int(std_accel_4_bound),
+                               'std_accel_5_multiple': int(std_accel_5_multiple)
                                }
 
         auto_buy_sell(code, item_dict[code], kw)
