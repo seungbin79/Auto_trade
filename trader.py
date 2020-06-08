@@ -15,15 +15,16 @@ import util
 MAX_VOL_BUCKET = 4                      # volume 최대 deque 저장 갯수 (시점 duration 통해 속도 계산 사용)
 MAX_PRICE_BUCKET = 3                    # Price 최대 deque 저장
 MAX_ACCEL_COUNT = 10                    # volume accel history 저장 갯수
-MAX_GRADI_COUNT = 5                     # Gradient history 최대 저장 갯수
+MAX_GRADI_COUNT = 7                     # Gradient history 최대 저장 갯수
 MA_SHORT_TERM = 11                      # 단기구간 이평 범위
 MA_MID_TERM = 54                        # 중기구간 이평 범위
 MA_LONG_TERM = 105                      # 장기구간 이평 범위
 STD_MIN_BONG = 1                        # 기준 분봉
 STD_BUYABLE_ACCEL_SCALE = 7             # 전봉 대비 매수 가능 거래속도 배율. (종목별로 설정되어야 한다.)
-STD_CUT_MIN_ACCEL_RATIO = 0.5           # 절대적 매도를 위한 전봉 비교를 위한 현재 거래량 속도 대비 비율
+STD_CUT_MIN_ACCEL_RATIO = 0.4           # 절대적 매도를 위한 전봉 비교를 위한 현재 거래량 속도 대비 비율
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
 STD_CUT_BUYING_PRICE_RATIO = 0.02       # 매수가 아래 2% 까지 허용
+STD_CUT_PROFITABLE_PRICE_RATIO = 0.02   # 매수가 위로 (2%) 가격상승 하는 경우 절반매도 전략
 
 def cal_accel_multiple(accel, item_dict):
     accel_scale = 0
@@ -100,13 +101,15 @@ def is_buyable(item_code, item_dict, kw):
     if sum_gradient < 0:
         false_cnt += 1
 
+
     false_idx = '매수불가'
     if false_cnt == 0:
         false_idx = '매수가능'
 
-    print("02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 기울기합: %s "
-          % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev3_accel_scale), round(prev2_accel_scale),
-             round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), sum_gradient))
+    console_str = "02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 기울기합: %s "\
+                  % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev3_accel_scale), round(prev2_accel_scale),
+                     round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), round(sum_gradient, 3))
+    kw.write(console_str)
 
     if false_cnt == 0:
         return True
@@ -114,7 +117,7 @@ def is_buyable(item_code, item_dict, kw):
     return False
 
 
-def is_sellable(item_code, item_dict, kw):
+def get_sellable_guide(item_code, item_dict, kw):
     false_cnt = 0
 
     # ===========================================================================
@@ -127,17 +130,22 @@ def is_sellable(item_code, item_dict, kw):
 
     # ===========================================================================
     # 거래량 속도가 줄어드는 경우 accel_history 4 단계 연속으로 빠지는 경우
+    # 기울기 합 또한 음수 이어야 한다.
     # ===========================================================================
+    sum_gradient = sum(item_dict['price_gradient_history'])
     accel_hist = item_dict['accel_history']
     hist_1 = -999
     hist_2 = -999
     hist_3 = -999
-    if len(accel_hist) >= 4:
-        hist_1 = accel_hist[1]
-        hist_2 = accel_hist[2]
-        hist_3 = accel_hist[3]
-        if (accel_hist[0] <= hist_1) and (hist_1 <= hist_2) and (hist_2 <= hist_3):
-           false_cnt += 1
+    # if len(accel_hist) >= 4:
+    #     hist_1 = accel_hist[1]
+    #     hist_2 = accel_hist[2]
+    #     hist_3 = accel_hist[3]
+    #     if (accel_hist[0] <= hist_1) and (hist_1 <= hist_2) and (hist_2 <= hist_3):
+    #         # 거래량 속도가 저하됨과 동시에 가격 기울기합이 < 0 이어야 한다.
+    #         # 거래량이 줄어든 경우 가격 하락 기운도 동반해야 매도를 취하는 전략
+    #         if sum_gradient < 0:
+    #             false_cnt += 2
 
     # ===========================================================================
     # 전 분봉 속도 대비 accel이 현저희 낮을 때
@@ -145,35 +153,48 @@ def is_sellable(item_code, item_dict, kw):
     pre_min_vol_accel = item_dict['pre_min_vol_accel']
     current_accel = item_dict['cur_vol_accel']
     if pre_min_vol_accel * STD_CUT_MIN_ACCEL_RATIO >= current_accel:
-        false_cnt += 1
+        false_cnt += 4
 
     # ===========================================================================
     # 가격이 매입가 보다 절대수치% 만큼 빠진 경우
     # ===========================================================================
     buying_price = item_dict["buying_time_price"]
     current_price = item_dict['current_price']
-    if buying_price * (1 - STD_CUT_BUYING_PRICE_RATIO) >= current_price:
-        false_cnt += 1
+    if float(buying_price) * (1 - STD_CUT_BUYING_PRICE_RATIO) >= float(current_price):
+        false_cnt += 8
 
     # ===========================================================================
     # 가격 기울기 합이 음수인 경우
     # ===========================================================================
     sum_gradient = sum(item_dict['price_gradient_history'])
     if sum_gradient < 0:
-        false_cnt += 1
+        false_cnt += 16
+
+    # ===========================================================================
+    # 상승 매도: 일정 % 상승하는 경우 매도 전략을 취한다.
+    # 한번 분할매도 한 경우 분할매도가 기준으로 다시 일정 % 상승하는 경우 매도 (split_sell_price)
+    # ===========================================================================
+    buying_price = item_dict["buying_time_price"]
+    if item_dict['split_sell_price'] > 0:
+        buying_price = item_dict['split_sell_price']
+    current_price = item_dict['current_price']
+    if float(buying_price) * (1 + STD_CUT_PROFITABLE_PRICE_RATIO) <= float(current_price):
+        item_dict['split_sell_price'] = current_price
+        false_cnt = 1000
 
     false_idx = "매도불가"
-    if false_cnt > 0:
-        false_idx = "매도가능"
+    if false_cnt > 999:
+        false_idx = "상승매도"
+    elif false_cnt > 0:
+        false_idx = '일반매도'
 
-    print("03, %s, 종목: %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s, 기울기합: %s"
-          % (false_idx, item_dict['name'], item_dict["chejango"], round(buying_time_accel), round(current_accel), round(hist_1), round(hist_2), round(hist_3),
-             round(pre_min_vol_accel), buying_price, current_price, sum_gradient))
+    console_str = "03, %s, %s, 종목: %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s, 기울기합: %s"\
+                  % (false_idx, false_cnt, item_dict['name'], item_dict["chejango"], round(buying_time_accel), round(current_accel), round(hist_1), round(hist_2), round(hist_3),
+                     round(pre_min_vol_accel), buying_price, current_price, round(sum_gradient, 3))
 
-    if false_cnt > 0:
-        return True
+    kw.write(console_str)
 
-    return False
+    return false_cnt
 
 def auto_buy_sell(item_code, item_dict, kw):
     accounts = kw.get_login_info("ACCNO")
@@ -230,7 +251,6 @@ def auto_buy_sell(item_code, item_dict, kw):
         df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
                               index=kw.ohlcv['date'])
 
-
     #print(df_day)
 
     # ===========================================================================
@@ -250,8 +270,6 @@ def auto_buy_sell(item_code, item_dict, kw):
     else:
         item_dict["chejango"] = 0
         item_dict["buying_time_price"] = 0
-
-
 
     # ===========================================================================
     # 현재 시점 기준 MAX_VOL_BUCKET 초간 거래량 및 거래량 속도 (큐 사용)
@@ -322,12 +340,17 @@ def auto_buy_sell(item_code, item_dict, kw):
         item_dict['price_gradient_history'].appendleft(gradi)
 
     # 콘솔 출력
-    print("01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " %
-          (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'].iloc[1])), round(abs(df_min['volume'].iloc[0])), round(abs(df_day['volume'].iloc[0])),
-           round(item_dict['third_before_min_vol_accel']), round(item_dict['pre_before_min_vol_accel']), round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'],
-           round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']), round(item_dict['ma_long_term'])))
-    print('01, 종목: %s, 현기울기: %s, 가격현황: %s, 기울기현황: %s'
-          % (item_dict['name'], item_dict['price_gradient'], list(item_dict['deque_price']), list(item_dict['price_gradient_history'])))
+    console_str = "01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " % \
+                  (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'].iloc[1])), round(abs(df_min['volume'].iloc[0])), round(abs(df_day['volume'].iloc[0])),
+                   round(item_dict['third_before_min_vol_accel']), round(item_dict['pre_before_min_vol_accel']), round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'],
+                   round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']), round(item_dict['ma_long_term']))
+    kw.write(console_str)
+
+    console_str = '01, 종목: %s, 현기울기: %s, 가격현황: %s, 기울기현황: %s'\
+                  % (item_dict['name'], item_dict['price_gradient'], list(item_dict['deque_price']), list(item_dict['price_gradient_history']))
+    kw.write(console_str)
+
+
 
     # ===========================================================================
     # 매수 가능여부 확인 및 매수 진행
@@ -351,17 +374,34 @@ def auto_buy_sell(item_code, item_dict, kw):
     # ===========================================================================
     # 매도 가능여부 확인 및 매도 진행
     # ===========================================================================
-    if item_dict["chejango"] > 0 and is_sellable(item_code, item_dict, kw):
+    if item_dict["chejango"] > 0:
+        sellable_cnt = get_sellable_guide(item_code, item_dict, kw)
         hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
-        kw.send_order('send_order_req', '0101', account_number, 2, item_code, item_dict["chejango"],
-                      item_dict['current_price'],
-                      hoga_lookup[item_dict["sell_type"]], '')
+        # 상승매도 전략 (절반매도)
+        if sellable_cnt > 999:
+            sell_qty = int(item_dict["chejango"] / 2)
+            if item_dict["chejango"] == 1:
+                sell_qty = 1
+                # 분할 잔고 청산이 되므로 split_sell_price = 0 처리
+                item_dict['split_sell_price'] = 0
+            kw.send_order('send_order_req', '0101', account_number, 2, item_code, sell_qty,
+                          item_dict['current_price'],
+                          hoga_lookup[item_dict["sell_type"]], '')
+        # 일반매도
+        elif sellable_cnt > 0:
+            kw.send_order('send_order_req', '0101', account_number, 2, item_code, item_dict["chejango"],
+                          item_dict['current_price'],
+                          hoga_lookup[item_dict["sell_type"]], '')
+            # 잔고 청산이 되므로 split_sell_price = 0 처리
+            item_dict['split_sell_price'] = 0
+        else:
+            pass
 
         time.sleep(1.7)
 
         # 시장가 매도가 아닌경우 매도 루프 만들어야 한다.
 
-    print('')
+    kw.write('')
     time.sleep(4.5)
 
 
@@ -398,6 +438,7 @@ if __name__ == "__main__":
     'deque_price_time': dq_date,            # 현재가격 저장 시간 큐
     'price_gradient': 0,                    # 현재가격에 대한 기울기 (MAX_PRICE_BUCKET 기준)
     'price_gradient_history': dq_gradi      # 가격 기울기 저장 history
+    'split_sell_price': 0                   # 분할매도 전략시 분할매도가 저장 
     '''
     item_dict = {}
 
@@ -424,8 +465,6 @@ if __name__ == "__main__":
         std_accel_4_multiple = split_row_data[11]
         std_accel_4_bound = split_row_data[12]
         std_accel_5_multiple = split_row_data[13]
-
-
 
         if item_dict.get(code) is None:
             dq_vol = deque()
@@ -467,9 +506,11 @@ if __name__ == "__main__":
                                'std_accel_3_bound': int(std_accel_3_bound),
                                'std_accel_4_multiple': int(std_accel_4_multiple),
                                'std_accel_4_bound': int(std_accel_4_bound),
-                               'std_accel_5_multiple': int(std_accel_5_multiple)
+                               'std_accel_5_multiple': int(std_accel_5_multiple),
+                               'split_sell_price': 0
                                }
 
         auto_buy_sell(code, item_dict[code], kw)
 
+    kw.kiwoom_close()
     app.quit()

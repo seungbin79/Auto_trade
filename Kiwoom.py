@@ -6,6 +6,8 @@ import time
 import pandas as pd
 import sqlite3
 import util
+import datetime
+import os
 
 TR_REQ_TIME_INTERVAL = 0.2
 
@@ -27,6 +29,38 @@ class Kiwoom(QAxWidget, SingletonInstane):
         super().__init__()
         self._create_kiwoom_instance()
         self._set_signal_slots()
+        self._create_logfile_writer()
+
+    def kiwoom_close(self):
+        self._close_logfile_writer()
+
+    def _create_logfile_writer(self):
+        dir_str = ".\\log\\"
+        filename = "log_%s%s" % (datetime.datetime.today().strftime("%Y%m%d"), '.txt')
+        fullpath = "%s%s" % (dir_str, filename)
+
+        check_file = False
+        for (path, dirname, files) in os.walk(".\\log"):
+            if filename in files:
+                check_file = True
+                break
+
+        if check_file:
+            self._f = open(fullpath, mode='at', encoding='utf-8')
+        else:
+            self._f = open(fullpath, mode='wt', encoding='utf-8')
+
+    def write(self, log_str):
+        logs = []
+        logs.append(log_str)
+        logs.append('\n')
+        log = ''.join(logs)
+        self._f.write(log)
+        self._f.flush()
+        print(log_str)
+
+    def _close_logfile_writer(self):
+        self._f.close()
 
     def _create_kiwoom_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
@@ -117,13 +151,13 @@ class Kiwoom(QAxWidget, SingletonInstane):
         :param kwargs:
         :return:
         """
-        print("주문: %s %s %s %s %s %s %s %s %s" % (
-        sRQName, sScreenNo, sAccNo, nOrderType, sCode, nQty, nPrice, sHogaGb, sOrgOrderNo))
+        # print("주문: %s %s %s %s %s %s %s %s %s" % (sRQName, sScreenNo, sAccNo, nOrderType, sCode, nQty, nPrice, sHogaGb, sOrgOrderNo))
+        self.write("주문: %s %s %s %s %s %s %s %s %s" % (sRQName, sScreenNo, sAccNo, nOrderType, sCode, nQty, nPrice, sHogaGb, sOrgOrderNo))
         lRet = self.dynamicCall("SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",
                                        [sRQName, sScreenNo, sAccNo, nOrderType, sCode, nQty, nPrice, sHogaGb,
                                         sOrgOrderNo])
-        print("send_order.lRet: {}".format(lRet))
-
+        # print("send_order.lRet: {}".format(lRet))
+        self.write("send_order.lRet: {}".format(lRet))
 
     def _get_chejan_data(self, fid):
         ret = self.dynamicCall("GetChejanData(int)", fid)
@@ -468,6 +502,10 @@ class Kiwoom(QAxWidget, SingletonInstane):
             strip_data = '-' + strip_data
 
         return strip_data
+
+
+
+
 
 
 if __name__ == "__main__":
