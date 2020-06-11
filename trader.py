@@ -96,10 +96,18 @@ def is_buyable(item_code, item_dict, kw):
         false_cnt += 1
 
     # ===========================================================================
-    # 가격 기울기 현황 합이 양수 이어야 한다.
+    # 가격 기울기 현황 합이 양수 이어야 한다. 0보다 커야한다.
     # ===========================================================================
     sum_gradient = sum(item_dict['price_gradient_history'])
-    if sum_gradient < 0:
+    if sum_gradient <= 0:
+        false_cnt += 1
+
+    # ===========================================================================
+    # 단기이평이 중기이평보다 같거나 높아야 한다.
+    # ===========================================================================
+    ma_short = item_dict['ma_short_term']
+    ma_mid = item_dict['ma_mid_term']
+    if ma_short < ma_mid:
         false_cnt += 1
 
 
@@ -107,9 +115,9 @@ def is_buyable(item_code, item_dict, kw):
     if false_cnt == 0:
         false_idx = '매수가능'
 
-    console_str = "02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 기울기합: %s "\
+    console_str = "02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 중기이평: %s, 기울기합: %s "\
                   % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev3_accel_scale), round(prev2_accel_scale),
-                     round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), round(sum_gradient, 3))
+                     round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), round(ma_mid), round(sum_gradient, 3))
     kw.write(console_str)
 
     if false_cnt == 0:
