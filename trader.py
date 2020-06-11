@@ -25,6 +25,7 @@ STD_CUT_MIN_ACCEL_RATIO = 0.4           # 절대적 매도를 위한 전봉 비�
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
 STD_CUT_BUYING_PRICE_RATIO = 0.02       # 매수가 아래 2% 까지 허용
 STD_CUT_PROFITABLE_PRICE_RATIO = 0.02   # 매수가 위로 (2%) 가격상승 하는 경우 절반매도 전략
+GLOBAL_SLEEP_TIME = 4.5                 # global sleep time
 
 def cal_accel_multiple(accel, item_dict):
     accel_scale = 0
@@ -339,9 +340,12 @@ def auto_buy_sell(item_code, item_dict, kw):
     else:
         item_dict['price_gradient_history'].appendleft(gradi)
 
+    # loop count
+    item_dict['loop_count'] += 1
+
     # 콘솔 출력
-    console_str = "01, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " % \
-                  (util.get_str_now(), item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'].iloc[1])), round(abs(df_min['volume'].iloc[0])), round(abs(df_day['volume'].iloc[0])),
+    console_str = "01, %s, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 현분봉거래량: %s, 누적거래량: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " % \
+                  (util.get_str_now(), item_dict['loop_count'], item_dict['name'], item_dict['current_price'], round(abs(df_min['volume'].iloc[1])), round(abs(df_min['volume'].iloc[0])), round(abs(df_day['volume'].iloc[0])),
                    round(item_dict['third_before_min_vol_accel']), round(item_dict['pre_before_min_vol_accel']), round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'],
                    round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']), round(item_dict['ma_long_term']))
     kw.write(console_str)
@@ -349,6 +353,71 @@ def auto_buy_sell(item_code, item_dict, kw):
     console_str = '01, 종목: %s, 현기울기: %s, 가격현황: %s, 기울기현황: %s'\
                   % (item_dict['name'], item_dict['price_gradient'], list(item_dict['deque_price']), list(item_dict['price_gradient_history']))
     kw.write(console_str)
+
+
+    # ===========================================================================
+    # 거래를 위한 기본 루프 횟수가 충족되어야 매매진행을 한다.
+    # 기울기 버켓 기준으로 3 버켓 쌓이면 매매 진행한다.
+    # ===========================================================================
+    if item_dict['loop_count'] < MAX_GRADI_COUNT - 4:
+        kw.write('not enough loop_count ...')
+        kw.write('')
+        time.sleep(GLOBAL_SLEEP_TIME)
+        return
+
+    # ===========================================================================
+    # 전 시점에 매수를 했는데, 잔량이 없으면 VI, 상한가 등의 이유로 매수 진행이 안된 경우
+    # 이런 경우는 매매 진행하면 안된다. (매수가 계속 들어갈 위험이 있다.)
+    # 이전에 들어간 매수 주문을 취소해야 한다.
+    # ===========================================================================
+    if item_dict['chejango'] == 0 and item_dict['is_buy'] == 1:
+        kw.write('not permitted additional buy order ...')
+
+        kw.reset_opt10075_output()
+        kw.set_input_value("계좌번호", account_number)
+        kw.set_input_value("전체종목구분", 1)
+        kw.set_input_value("매매구분", 2)
+        kw.set_input_value("종목코드", item_code)
+        kw.set_input_value("체결구분", 1) #0전체, 2체결, 1미체결
+        kw.comm_rq_data("opt10075_req", "opt10075", 0, "0341")
+        while kw.remained_data:
+            time.sleep(1)
+            kw.set_input_value("계좌번호", account_number)
+            kw.set_input_value("전체종목구분", 1)
+            kw.set_input_value("매매구분", 2)
+            kw.set_input_value("종목코드", item_code)
+            kw.set_input_value("체결구분", 1) #0전체, 2체결, 1미체결
+            kw.comm_rq_data("opt10075_req", "opt10075", 0, "0341")
+
+        if kw.opt10075_output.get(item_code) is not None:
+            hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
+            for output in kw.opt10075_output[item_code]:
+                order_number = output['order_number']
+                unbuyed_qty = output['unbuyed_qty']
+
+                kw.send_order('send_order_req', '0101', account_number, 3, item_code, unbuyed_qty,
+                              0, hoga_lookup[item_dict["buy_type"]], order_number)
+
+                time.sleep(0.2)
+
+        # 매수인덱스 초기화
+        item_dict['is_buy'] = 0
+
+        kw.write('')
+        time.sleep(GLOBAL_SLEEP_TIME)
+        return
+
+    # ===========================================================================
+    # 상한가 종목은 거래하지 않는다. (상한가 기준은 28%로 잡는다.)(전일 종가 기준이다.)
+    # 기존에 이미 매수된 경우 매도하지 않는다.
+    # ===========================================================================
+    max_price = abs(df_day['close'].iloc[1]) * 1.28
+    cur_price = item_dict['current_price']
+    if cur_price >= max_price:
+        kw.write("current price has been aleady max price ...")
+        kw.write('')
+        time.sleep(GLOBAL_SLEEP_TIME)
+        return
 
 
 
@@ -365,6 +434,8 @@ def auto_buy_sell(item_code, item_dict, kw):
 
         # 매수시 거래량 속도 저장
         item_dict['buying_time_accel'] = item_dict['cur_vol_accel']
+        # 매수 인덱스 설정
+        item_dict['is_buy'] = 1
 
         # 매수 후 잠시 후 주문취소 (미체결에 대한 주문취소) - 일단 시장가로 대응할거라서..미체결은 없다.
         # time.sleep(0.5)
@@ -387,6 +458,8 @@ def auto_buy_sell(item_code, item_dict, kw):
             kw.send_order('send_order_req', '0101', account_number, 2, item_code, sell_qty,
                           item_dict['current_price'],
                           hoga_lookup[item_dict["sell_type"]], '')
+            # 매수인덱스 초기화
+            item_dict['is_buy'] = 0
         # 일반매도
         elif sellable_cnt > 0:
             kw.send_order('send_order_req', '0101', account_number, 2, item_code, item_dict["chejango"],
@@ -394,15 +467,18 @@ def auto_buy_sell(item_code, item_dict, kw):
                           hoga_lookup[item_dict["sell_type"]], '')
             # 잔고 청산이 되므로 split_sell_price = 0 처리
             item_dict['split_sell_price'] = 0
+            # 매수인덱스 초기화
+            item_dict['is_buy'] = 0
         else:
             pass
+
 
         time.sleep(1.7)
 
         # 시장가 매도가 아닌경우 매도 루프 만들어야 한다.
 
     kw.write('')
-    time.sleep(4.5)
+    time.sleep(GLOBAL_SLEEP_TIME)
 
 
 
@@ -439,6 +515,8 @@ if __name__ == "__main__":
     'price_gradient': 0,                    # 현재가격에 대한 기울기 (MAX_PRICE_BUCKET 기준)
     'price_gradient_history': dq_gradi      # 가격 기울기 저장 history
     'split_sell_price': 0                   # 분할매도 전략시 분할매도가 저장 
+    'loop_count': 0                         # 종목별 루프 횟수
+    'is_buy': 0                             # 매수가 들어갔는지 여부 
     '''
     item_dict = {}
 
@@ -507,7 +585,9 @@ if __name__ == "__main__":
                                'std_accel_4_multiple': int(std_accel_4_multiple),
                                'std_accel_4_bound': int(std_accel_4_bound),
                                'std_accel_5_multiple': int(std_accel_5_multiple),
-                               'split_sell_price': 0
+                               'split_sell_price': 0,
+                               'loop_count': 0,
+                               'is_buy': 0
                                }
 
         auto_buy_sell(code, item_dict[code], kw)

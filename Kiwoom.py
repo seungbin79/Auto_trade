@@ -325,6 +325,8 @@ class Kiwoom(QAxWidget, SingletonInstane):
             self._opt10080(rqname, trcode)
         elif rqname == "opt10085_req":
             self._opt10085(rqname, trcode)
+        elif rqname == "opt10075_req":
+            self._opt10075(rqname, trcode)
 
         try:
             self.tr_event_loop.exit()
@@ -349,6 +351,27 @@ class Kiwoom(QAxWidget, SingletonInstane):
 
     def reset_opw00018_output(self):
         self.opw00018_output = {'single': [], 'multi': {}}
+
+    def reset_opt10075_output(self):
+        self.opt10075_output = {}
+
+    def _opt10075(self, rqname, trcode):
+        data_cnt = self._get_repeat_cnt(trcode, rqname)
+
+        for i in range(data_cnt):
+            order = {}
+            order['order_number'] = self._get_comm_data(trcode, rqname, i, "주문번호")
+            order['org_order_number'] = self._get_comm_data(trcode, rqname, i, "원주문번호")
+            code = self._get_comm_data(trcode, rqname, i, "종목코드")
+            order['order_status'] = self._get_comm_data(trcode, rqname, i, "주문상태")
+            order['order_qty'] = int(self._get_comm_data(trcode, rqname, i, "주문수량"))
+            order['unbuyed_qty'] = int(self._get_comm_data(trcode, rqname, i, "미체결수량"))
+
+            if self.opt10075_output.get(code) is not None:
+                self.opt10075_output[code].append(order)
+            else:
+                self.opt10075_output = {code: []}
+                self.opt10075_output[code].append(order)
 
     def _opt10081(self, rqname, trcode):
         data_cnt = self._get_repeat_cnt(trcode, rqname)
