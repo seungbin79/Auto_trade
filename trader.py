@@ -660,7 +660,7 @@ if __name__ == "__main__":
                                'deque_price_time': dq_date,
                                'price_gradient': 0,
                                'price_gradient_history': dq_gradi,
-                               'std_buy_gradient': std_buy_gradient,
+                               'std_buy_gradient': int(std_buy_gradient),
                                'std_accel_1_multiple': int(std_accel_1_multiple),
                                'std_accel_1_bound': int(std_accel_1_bound),
                                'std_accel_2_multiple': int(std_accel_2_multiple),
