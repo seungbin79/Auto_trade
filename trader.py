@@ -25,7 +25,7 @@ STD_CUT_MIN_ACCEL_RATIO = 0.4           # 절대적 매도를 위한 전봉 비�
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
 STD_CUT_BUYING_PRICE_RATIO = 0.02       # 매수가 아래 2% 까지 허용
 STD_CUT_PROFITABLE_PRICE_RATIO = 0.02   # 매수가 위로 (2%) 가격상승 하는 경우 절반매도 전략
-GLOBAL_SLEEP_TIME = 4.5                 # global sleep time
+GLOBAL_SLEEP_TIME = 3.0                 # global sleep time
 
 def cal_accel_multiple(accel, item_dict):
     accel_scale = 0
@@ -97,10 +97,13 @@ def is_buyable(item_code, item_dict, kw):
 
     # ===========================================================================
     # 가격 기울기 현황 합이 양수 이어야 한다. 0보다 커야한다.
+    # 매수 절대 기울기 보다 같거나 커야 한다.
     # ===========================================================================
     sum_gradient = sum(item_dict['price_gradient_history'])
-    if sum_gradient <= 0:
+    std_buy_gradient = item_dict['std_buy_gradient']
+    if sum_gradient <= 0 or sum_gradient < std_buy_gradient:
         false_cnt += 1
+
 
     # ===========================================================================
     # 단기이평이 중기이평보다 같거나 높아야 한다.
@@ -115,9 +118,9 @@ def is_buyable(item_code, item_dict, kw):
     if false_cnt == 0:
         false_idx = '매수가능'
 
-    console_str = "02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 중기이평: %s, 기울기합: %s "\
+    console_str = "02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 중기이평: %s, 기울기합: %s, 절대매수기울기: %s "\
                   % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev3_accel_scale), round(prev2_accel_scale),
-                     round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), round(ma_mid), round(sum_gradient, 3))
+                     round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), round(ma_mid), round(sum_gradient, 3), std_buy_gradient)
     kw.write(console_str)
 
     if false_cnt == 0:
@@ -141,11 +144,11 @@ def get_sellable_guide(item_code, item_dict, kw):
     # 거래량 속도가 줄어드는 경우 accel_history 4 단계 연속으로 빠지는 경우
     # 기울기 합 또한 음수 이어야 한다.
     # ===========================================================================
-    sum_gradient = sum(item_dict['price_gradient_history'])
-    accel_hist = item_dict['accel_history']
-    hist_1 = -999
-    hist_2 = -999
-    hist_3 = -999
+    # sum_gradient = sum(item_dict['price_gradient_history'])
+    # accel_hist = item_dict['accel_history']
+    # hist_1 = -999
+    # hist_2 = -999
+    # hist_3 = -999
     # if len(accel_hist) >= 4:
     #     hist_1 = accel_hist[1]
     #     hist_2 = accel_hist[2]
@@ -197,8 +200,8 @@ def get_sellable_guide(item_code, item_dict, kw):
     elif false_cnt > 0:
         false_idx = '일반매도'
 
-    console_str = "03, %s, %s, 종목: %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 현속도-1: %s, 현속도-2: %s, 현속도-3: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s, 기울기합: %s"\
-                  % (false_idx, false_cnt, item_dict['name'], item_dict["chejango"], round(buying_time_accel), round(current_accel), round(hist_1), round(hist_2), round(hist_3),
+    console_str = "03, %s, %s, 종목: %s, 잔고: %s, 매수시속도: %s, 현재속도: %s, 전분봉속도: %s, 매수가격: %s, 현재가격: %s, 기울기합: %s"\
+                  % (false_idx, false_cnt, item_dict['name'], item_dict["chejango"], round(buying_time_accel), round(current_accel),
                      round(pre_min_vol_accel), buying_price, current_price, round(sum_gradient, 3))
 
     kw.write(console_str)
@@ -280,8 +283,6 @@ def auto_buy_sell(item_code, item_dict, kw):
     # df_min 정보의 현재가격 업데이트
     item_dict['df_min'].iloc[0, item_dict['df_min'].columns.get_loc('cur')] = df_day['close'].iloc[0]
 
-
-
     # item_dict 현재가격 업데이트
     item_dict['current_price'] = abs(df_day['close'].iloc[0])
 
@@ -349,10 +350,8 @@ def auto_buy_sell(item_code, item_dict, kw):
     item_dict['loop_count'] += 1
 
     # 콘솔 출력
-    console_str = "01, %s, %s, 종목: %s, 현재가: %s, 전분봉거래량: %s, 누적거래량: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " % \
-                  (util.get_str_now(), item_dict['loop_count'], item_dict['name'], item_dict['current_price'],
-                   round(abs(df_min['volume'].iloc[1])),
-                   round(abs(df_day['volume'].iloc[0])),
+    console_str = "01, %s, %s, 종목: %s, 현재가: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " % \
+                  (min_sec_date, item_dict['loop_count'], item_dict['name'], item_dict['current_price'],
                    round(item_dict['third_before_min_vol_accel']), round(item_dict['pre_before_min_vol_accel']),
                    round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'],
                    round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']),
@@ -362,6 +361,7 @@ def auto_buy_sell(item_code, item_dict, kw):
     console_str = '01, 종목: %s, 현기울기: %s, 가격현황: %s, 기울기현황: %s' \
                   % (item_dict['name'], item_dict['price_gradient'], list(item_dict['deque_price']),
                      list(item_dict['price_gradient_history']))
+    kw.write(console_str)
 
     # ===========================================================================
     # 거래를 위한 기본 루프 횟수가 충족되어야 매매진행을 한다.
@@ -592,6 +592,7 @@ if __name__ == "__main__":
     'deque_price_time': dq_date,            # 현재가격 저장 시간 큐
     'price_gradient': 0,                    # 현재가격에 대한 기울기 (MAX_PRICE_BUCKET 기준)
     'price_gradient_history': dq_gradi      # 가격 기울기 저장 history
+    'std_buy_gradient': std_buy_gradient    # 매수시 상승 기울기 절대값
     'split_sell_price': 0                   # 분할매도 전략시 분할매도가 저장 
     'loop_count': 0                         # 종목별 루프 횟수
     'is_buy': 0                             # 매수가 들어갔는지 여부 
@@ -622,6 +623,8 @@ if __name__ == "__main__":
         std_accel_4_multiple = split_row_data[11]
         std_accel_4_bound = split_row_data[12]
         std_accel_5_multiple = split_row_data[13]
+
+        std_buy_gradient = split_row_data[14]
 
         if item_dict.get(code) is None:
             dq_vol = deque()
@@ -657,6 +660,7 @@ if __name__ == "__main__":
                                'deque_price_time': dq_date,
                                'price_gradient': 0,
                                'price_gradient_history': dq_gradi,
+                               'std_buy_gradient': std_buy_gradient,
                                'std_accel_1_multiple': int(std_accel_1_multiple),
                                'std_accel_1_bound': int(std_accel_1_bound),
                                'std_accel_2_multiple': int(std_accel_2_multiple),
