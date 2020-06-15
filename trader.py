@@ -118,7 +118,7 @@ def is_buyable(item_code, item_dict, kw):
     if false_cnt == 0:
         false_idx = '매수가능'
 
-    console_str = "02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 중기이평: %s, 기울기합: %s, 절대매수기울기: %s "\
+    console_str = "02, %s, 종목: %s, 잔고: %s, 현속도: %s, 전전전봉속도*배율: %s, 전전봉속도*배율: %s, 전봉속도*배율: %s, 절대최소속도: %s, 현가: %s, 현분봉시작가: %s, 단기이평: %s, 중기이평: %s, 기울기합: %s, 절대매수기울기: %s " \
                   % (false_idx, item_dict['name'], chejango, round(cur_accel), round(prev3_accel_scale), round(prev2_accel_scale),
                      round(prev1_accel_scale), min_vol_accel, cur_real_price, cur_min_bong_open_price, round(ma_short), round(ma_mid), round(sum_gradient, 3), std_buy_gradient)
     kw.write(console_str)
@@ -350,8 +350,8 @@ def auto_buy_sell(item_code, item_dict, kw):
     item_dict['loop_count'] += 1
 
     # 콘솔 출력
-    console_str = "01, %s, %s, 종목: %s, 현재가: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " % \
-                  (min_sec_date, item_dict['loop_count'], item_dict['name'], item_dict['current_price'],
+    console_str = "01, %s, %s, 종목: %s, 매수인덱스: %s, 매도인덱스: %s, 현재가: %s, 전전전분봉속도: %s, 전전분봉속도: %s, 전분봉속도: %s, 현분봉속도: %s, 단기이평: %s, 중기이평: %s, 장기이평: %s " % \
+                  (min_sec_date, item_dict['loop_count'], item_dict['name'], item_dict['is_buy'], item_dict['is_sell'], item_dict['current_price'],
                    round(item_dict['third_before_min_vol_accel']), round(item_dict['pre_before_min_vol_accel']),
                    round(item_dict['pre_min_vol_accel']), item_dict['cur_vol_accel'],
                    round(item_dict['ma_short_term']), round(item_dict['ma_mid_term']),
@@ -413,6 +413,9 @@ def auto_buy_sell(item_code, item_dict, kw):
 
             item_dict["chejango"] = 0
             item_dict["buying_time_price"] = 0
+            #  인덱스 초기화
+            item_dict['is_buy'] = 0
+            item_dict['is_sell'] = 0
         kw.write('')
         time.sleep(GLOBAL_SLEEP_TIME)
         return
@@ -421,7 +424,7 @@ def auto_buy_sell(item_code, item_dict, kw):
     # 잔고 정보
     # 전 시점에 샀거나 판 시점 기준 잔고 업데이트 하면 된다.
     # ===========================================================================
-    if item_dict['is_buy'] == 1 or item_dict['is_sell'] == 1:
+    if item_dict['is_buy'] == 1 or item_dict['is_sell'] == 1 or item_dict['is_not_permitted'] == 1:
         kw.reset_opw00018_output()
         kw.set_input_value("계좌번호", account_number)
         kw.comm_rq_data("opw00018_req", "opw00018", 0, "2000")
@@ -438,12 +441,21 @@ def auto_buy_sell(item_code, item_dict, kw):
             item_dict["buying_time_price"] = 0
 
         # ===========================================================================
+        # 비 체결매수가 전시점 발생한 경우 다시 잔고 체크한번 하면서 인덱스는 초기화
+        # ===========================================================================
+        if item_dict['is_not_permitted'] == 1:
+            item_dict['is_not_permitted'] = 0
+
+        # ===========================================================================
         # 전 시점에 매수를 했는데, 잔량이 없으면 VI, 상한가 등의 이유로 매수 진행이 안된 경우
         # 이런 경우는 매매 진행하면 안된다. (매수가 계속 들어갈 위험이 있다.)
         # 이전에 들어간 매수 주문을 취소해야 한다.
         # ===========================================================================
         if item_dict['chejango'] == 0 and item_dict['is_buy'] == 1:
             kw.write('not permitted additional buy order ...')
+
+            # 비 체결 매수 발생시 인덱스 설정
+            item_dict['is_not_permitted'] = 1
 
             kw.reset_opt10075_output()
             kw.set_input_value("계좌번호", account_number)
@@ -474,6 +486,10 @@ def auto_buy_sell(item_code, item_dict, kw):
 
             # 매수인덱스 초기화
             item_dict['is_buy'] = 0
+
+            kw.write('')
+            time.sleep(GLOBAL_SLEEP_TIME)
+            return
         # 매수가 전시점 잘 되었으면 당 시점에서 매수 인덱스 초기화 해 준다.
         elif item_dict['chejango'] > 0 and item_dict['is_buy'] == 1:
             # 매수인덱스 초기화
@@ -527,9 +543,11 @@ def auto_buy_sell(item_code, item_dict, kw):
                 sell_qty = 1
                 # 분할 잔고 청산이 되므로 split_sell_price = 0 처리
                 item_dict['split_sell_price'] = 0
+
             kw.send_order('send_order_req', '0101', account_number, 2, item_code, sell_qty,
                           item_dict['current_price'],
                           hoga_lookup[item_dict["sell_type"]], '')
+
             # 매도인덱스 설정
             item_dict['is_sell'] = 1
             # 매수인덱스 초기화
@@ -597,6 +615,7 @@ if __name__ == "__main__":
     'loop_count': 0                         # 종목별 루프 횟수
     'is_buy': 0                             # 매수가 들어갔는지 여부 
     'is_sell': 0                            # 매도가 들어갔는지 여부
+    'is_not_poermitted'                     # 비 체결 매수 발생시 체크 인덱스
     '''
     item_dict = {}
 
@@ -673,7 +692,8 @@ if __name__ == "__main__":
                                'split_sell_price': 0,
                                'loop_count': 0,
                                'is_buy': 0,
-                               'is_sell': 0
+                               'is_sell': 0,
+                               'is_not_permitted': 0
                                }
 
         auto_buy_sell(code, item_dict[code], kw)
