@@ -250,41 +250,30 @@ def auto_buy_sell(item_code, item_dict, kw):
         #print(df_min)
 
     # ===========================================================================
-    # 현재 일 시세 정보 - 현재 가격, 현 분봉 시가, 거래량
+    # 현재 시세 정보 - 현재 가격, 현 분봉 시가, 거래량
     # ===========================================================================
-    kw.ohlcv = {'date': [], 'open': [], 'high': [], 'low': [], 'close': [], 'volume': []}
-
-    today = datetime.datetime.today().strftime("%Y%m%d")
     kw.set_input_value("종목코드", item_code)
-    kw.set_input_value("기준일자", today)
-    kw.set_input_value("수정주가구분", 1)
-    kw.comm_rq_data("opt10081_req", "opt10081", 0, "0101")
+    kw.comm_rq_data("opt10001_req", "opt10001", 0, "0101")
 
-    df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
-                          index=kw.ohlcv['date'])
-
-    while df_day.index.size == 0:
-        print('not found day. data...try again...')
-        time.sleep(0.2)
+    while item_code != kw.current_code:
+        kw.write('not found current. data...try again...')
         kw.set_input_value("종목코드", item_code)
-        kw.set_input_value("기준일자", today)
-        kw.set_input_value("수정주가구분", 1)
-        kw.comm_rq_data("opt10081_req", "opt10081", 0, "0101")
+        kw.comm_rq_data("opt10001_req", "opt10001", 0, "0101")
 
-        df_day = pd.DataFrame(kw.ohlcv, columns=['open', 'high', 'low', 'close', 'volume'],
-                              index=kw.ohlcv['date'])
+    current_price = abs(int(kw.current_price))
+    current_volumn = abs(int(kw.current_volumn))
+    current_max_price = abs(int(kw.current_max_price))
 
-    #print(df_day)
 
     # ===========================================================================
     # 현재가격 및 기초정보 업데이트
     # ===========================================================================
 
     # df_min 정보의 현재가격 업데이트
-    item_dict['df_min'].iloc[0, item_dict['df_min'].columns.get_loc('cur')] = df_day['close'].iloc[0]
+    item_dict['df_min'].iloc[0, item_dict['df_min'].columns.get_loc('cur')] = current_price
 
     # item_dict 현재가격 업데이트
-    item_dict['current_price'] = abs(df_day['close'].iloc[0])
+    item_dict['current_price'] = current_price
 
     # 분봉 pandas에 이동평균 정보 추가
     df_min = item_dict['df_min']
@@ -299,20 +288,20 @@ def auto_buy_sell(item_code, item_dict, kw):
     # deque volumn, price, time 업데이트
     if len(item_dict['deque_vol_cum']) >= MAX_VOL_BUCKET: # 거래량 버겟을 어느정도 볼 것인가
         item_dict['deque_vol_cum'].pop()
-        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'].iloc[0]))
+        item_dict['deque_vol_cum'].appendleft(current_volumn)
         item_dict['deque_vol_time'].pop()
         item_dict['deque_vol_time'].appendleft(time.time())
     else:
-        item_dict['deque_vol_cum'].appendleft(abs(df_day['volume'].iloc[0]))
+        item_dict['deque_vol_cum'].appendleft(current_volumn)
         item_dict['deque_vol_time'].appendleft(time.time())
 
     if len(item_dict['deque_price']) >= MAX_PRICE_BUCKET: # price 버겟을 어느정도 볼 것인가
         item_dict['deque_price'].pop()
-        item_dict['deque_price'].appendleft(abs(df_day['close'].iloc[0]))
+        item_dict['deque_price'].appendleft(current_price)
         item_dict['deque_price_time'].pop()
         item_dict['deque_price_time'].appendleft(time.time())
     else:
-        item_dict['deque_price'].appendleft(abs(df_day['close'].iloc[0]))
+        item_dict['deque_price'].appendleft(current_price)
         item_dict['deque_price_time'].appendleft(time.time())
 
     # 거래량 속도 계산
@@ -402,7 +391,7 @@ def auto_buy_sell(item_code, item_dict, kw):
     # 상한가 종목은 거래하지 않는다. (상한가 기준은 28%로 잡는다.)(전일 종가 기준이다.)
     # 기존에 이미 매수된 경우 매도 청산 한다.
     # ===========================================================================
-    max_price = abs(df_day['close'].iloc[1]) * 1.28
+    max_price = (current_max_price / 1.30) * 1.28
     cur_price = item_dict['current_price']
     if cur_price >= max_price:
         kw.write("current price has been aleady max price ...")
@@ -620,6 +609,7 @@ if __name__ == "__main__":
     item_dict = {}
 
     loop_item = deque(buy_list)
+
 
     while True:
         buy_item = loop_item.popleft()
