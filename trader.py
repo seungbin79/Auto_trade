@@ -25,7 +25,7 @@ STD_CUT_MIN_ACCEL_RATIO = 0.4           # 절대적 매도를 위한 전봉 비�
 STD_CUT_BUYING_TIME_ACCEL_RATIO = 0.4   # 매수 시점 대비 거래량 속도가 40% 수준인 경우 CUT
 STD_CUT_BUYING_PRICE_RATIO = 0.02       # 매수가 아래 2% 까지 허용
 STD_CUT_PROFITABLE_PRICE_RATIO = 0.02   # 매수가 위로 (2%) 가격상승 하는 경우 절반매도 전략
-GLOBAL_SLEEP_TIME = 3.0                 # global sleep time
+GLOBAL_SLEEP_TIME = 4.0                 # global sleep time
 
 def cal_accel_multiple(accel, item_dict):
     accel_scale = 0
@@ -352,6 +352,7 @@ def auto_buy_sell(item_code, item_dict, kw):
                      list(item_dict['price_gradient_history']))
     kw.write(console_str)
 
+
     # ===========================================================================
     # 거래를 위한 기본 루프 횟수가 충족되어야 매매진행을 한다.
     # 기울기 버켓 기준으로 3 버켓 쌓이면 매매 진행한다.
@@ -378,7 +379,7 @@ def auto_buy_sell(item_code, item_dict, kw):
             # 이전 잔고가 남아 있다면 청산
             if item_dict["chejango"] > 0:
                 kw.send_order('send_order_req', '0101', account_number, 2, item_code, item_dict["chejango"],
-                              item_dict['current_price'], '03', '')
+                              0, '03', '')
 
                 item_dict["chejango"] = 0
                 item_dict["buying_time_price"] = 0
@@ -398,7 +399,7 @@ def auto_buy_sell(item_code, item_dict, kw):
         # 이전 잔고가 남아 있다면 청산
         if item_dict["chejango"] > 0:
             kw.send_order('send_order_req', '0101', account_number, 2, item_code, item_dict["chejango"],
-                          item_dict['current_price'], '03', '')
+                          0, '03', '')
 
             item_dict["chejango"] = 0
             item_dict["buying_time_price"] = 0
@@ -502,7 +503,7 @@ def auto_buy_sell(item_code, item_dict, kw):
     # ===========================================================================
     if is_buyable(item_code, item_dict, kw):
         hoga_lookup = {'지정가': "00", '시장가': "03", '조건부지정가': '05', '최유리지정가': '06', '최우선지정가': '07'}
-        kw.send_order('send_order_req', '0101', account_number, 1, item_code, item_dict["buy_target_num"], item_dict['current_price'],
+        kw.send_order('send_order_req', '0101', account_number, 1, item_code, item_dict["buy_target_num"], 0,
                       hoga_lookup[item_dict["buy_type"]], '')
 
         time.sleep(1.7)
@@ -534,8 +535,7 @@ def auto_buy_sell(item_code, item_dict, kw):
                 item_dict['split_sell_price'] = 0
 
             kw.send_order('send_order_req', '0101', account_number, 2, item_code, sell_qty,
-                          item_dict['current_price'],
-                          hoga_lookup[item_dict["sell_type"]], '')
+                          0, hoga_lookup[item_dict["sell_type"]], '')
 
             # 매도인덱스 설정
             item_dict['is_sell'] = 1
@@ -544,8 +544,7 @@ def auto_buy_sell(item_code, item_dict, kw):
         # 일반매도
         elif sellable_cnt > 0:
             kw.send_order('send_order_req', '0101', account_number, 2, item_code, item_dict["chejango"],
-                          item_dict['current_price'],
-                          hoga_lookup[item_dict["sell_type"]], '')
+                          0, hoga_lookup[item_dict["sell_type"]], '')
             # 잔고 청산이 되므로 split_sell_price = 0 처리
             item_dict['split_sell_price'] = 0
             # 매도인덱스 설정
